@@ -1,13 +1,14 @@
 import SwiftUI
 
 enum Action: String, CaseIterable {
-    case open, focus, desktop, left, right, top, bottom, full, center, settings
+    case open, focus, desktop, move, left, right, top, bottom, full, center, settings
 
     var defaultTrigger: String {
         switch self {
         case .open: "o"
         case .focus: "b"
         case .desktop: "d"
+        case .move: "m"
         case .left: "h"
         case .right: "l"
         case .top: "k"
@@ -18,11 +19,53 @@ enum Action: String, CaseIterable {
         }
     }
 
+    var title: String {
+        switch self {
+        case .open: "Open App"
+        case .focus: "Switch to App"
+        case .desktop: "Go to Desktop"
+        case .move: "Move Window to Desktop"
+        case .left: "Left Half"
+        case .right: "Right Half"
+        case .top: "Top Half"
+        case .bottom: "Bottom Half"
+        case .full: "Fill Screen"
+        case .center: "Center"
+        case .settings: "Settings"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .open: "arrow.up.forward.app"
+        case .focus: "macwindow.on.rectangle"
+        case .desktop: "rectangle.3.group"
+        case .move: "rectangle.portrait.and.arrow.right"
+        case .left: "rectangle.lefthalf.filled"
+        case .right: "rectangle.righthalf.filled"
+        case .top: "rectangle.tophalf.filled"
+        case .bottom: "rectangle.bottomhalf.filled"
+        case .full: "rectangle.fill"
+        case .center: "rectangle.center.inset.filled"
+        case .settings: "gearshape"
+        }
+    }
+
+    // nil when the command takes no argument.
+    var argHint: String? {
+        switch self {
+        case .open, .focus: "app"
+        case .desktop, .move: "1-9 h l"
+        default: nil
+        }
+    }
+
     var help: String {
         switch self {
         case .open: "Open app — <trigger> Safari"
         case .focus: "Switch to running app — <trigger> saf"
         case .desktop: "Go to desktop — <trigger> 2 / h / l"
+        case .move: "Move window to desktop — <trigger> 2 / h / l"
         case .left: "Window: left half"
         case .right: "Window: right half"
         case .top: "Window: top half"

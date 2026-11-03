@@ -23,6 +23,7 @@ Press **Option+Space** to open the command bar. **Enter** runs the command; **Es
 | `b saf` | Switch to a running app whose name starts with the text |
 | `d 2` | Go to desktop 2 (1–9) |
 | `d h` / `d l` | Go to the desktop on the left / right |
+| `m 2` / `m h` / `m l` | Move the current window to desktop 2 / left / right, and follow it |
 | `h` / `l` | Move the window to the left / right half |
 | `k` / `j` | Move the window to the top / bottom half |
 | `f` | Make the window fill the screen |
@@ -65,5 +66,6 @@ swift build && .build/debug/Normalcy --selftest
 ## Limitations
 
 - Window commands use the screen that shows the command bar, so multiple monitors aren't handled well yet.
+- `m` works by briefly dragging the window by its title bar while switching desktops. It needs the same desktop shortcuts as `d`, and it fails on windows with no empty title bar space just right of the green button.
 - The hotkey is fixed at Option+Space.
 - You can rename and hide the built-in commands, but you can't add new ones yet.

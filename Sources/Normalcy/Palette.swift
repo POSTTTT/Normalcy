@@ -1,15 +1,20 @@
 import SwiftUI
 
-struct RunningApp: Equatable {
+// A running app (pid set) for the switch list, or an installed one (path set) for the open list.
+struct AppItem: Equatable {
     var name: String
     var icon: NSImage?
     var pid: pid_t = 0
+    var path: String?
 }
 
 final class Palette: ObservableObject {
-    @Published var text = "" { didSet { selected = 0 } }
+    // The highlight goes back to the top only when the text really changes: the text field
+    // also writes back the same value when the view redraws (e.g. a preview arriving).
+    @Published var text = "" { didSet { if text != oldValue { selected = 0 } } }
     var live: (Command) -> Void = { _ in }
-    @Published var apps: [RunningApp] = [] // running apps, by name; refreshed when the bar opens
+    @Published var apps: [AppItem] = [] // running apps, by name; refreshed when the bar opens
+    var installed: [AppItem] = [] // apps in the Applications folders, by name
     @Published var appPreviews: [pid_t: NSImage] = [:] // pid -> picture of its front window
     var loadPreview: (pid_t) -> Void = { _ in } // runs a command right away, bar staying open
     @Published var selected = 0
@@ -149,14 +154,19 @@ final class Palette: ObservableObject {
         text = t
     }
 
-    // After the switch command and a space ("b saf"): running apps whose name starts with what's typed.
-    // shortcut: shows the first 8; scroll if more ever need to fit.
-    var appMatches: [RunningApp]? {
+    // After the switch or open command and a space ("b saf", "o saf"): running or installed apps
+    // whose name starts with what's typed.
+    var appMatches: [AppItem]? {
         let s = text.drop { $0 == " " }
-        guard let sp = s.firstIndex(of: " "),
-              Command.lookup(String(s[..<sp]), in: defs())?.id == Action.focus.rawValue else { return nil }
+        guard let sp = s.firstIndex(of: " ") else { return nil }
+        let pool: [AppItem]
+        switch Command.lookup(String(s[..<sp]), in: defs())?.id {
+        case Action.focus.rawValue: pool = apps
+        case Action.open.rawValue: pool = installed
+        default: return nil
+        }
         let q = s[s.index(after: sp)...].trimmingCharacters(in: .whitespaces).lowercased()
-        return Array(apps.filter { q.isEmpty || $0.name.lowercased().hasPrefix(q) }.prefix(8))
+        return pool.filter { q.isEmpty || $0.name.lowercased().hasPrefix(q) }
     }
 
     func move(_ by: Int) {
@@ -264,16 +274,25 @@ struct PaletteView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.97)))
         }
         if let apps = model.appMatches {
-            if apps.indices.contains(model.selected) {
+            if apps.indices.contains(model.selected), apps[model.selected].pid != 0 { // running apps only
                 appPreview(apps[model.selected])
                     .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
             if !apps.isEmpty {
-                VStack(spacing: 2) {
-                    ForEach(Array(apps.enumerated()), id: \.element.name) { i, app in
-                        appRow(app, selected: i == model.selected)
-                            .onTapGesture { model.selected = i; model.enter() }
+                // Up to 8 rows tall; scrolls to keep the highlight in view.
+                ScrollViewReader { scroll in
+                    ScrollView {
+                        LazyVStack(spacing: 2) {
+                            ForEach(Array(apps.enumerated()), id: \.element.name) { i, app in
+                                appRow(app, selected: i == model.selected)
+                                    .id(i)
+                                    .onTapGesture { model.selected = i; model.enter() }
+                            }
+                        }
                     }
+                    .scrollIndicators(.never)
+                    .frame(height: CGFloat(min(apps.count, 8)) * 42 - 2)
+                    .onChange(of: model.selected) { scroll.scrollTo(model.selected) }
                 }
                 .padding(8)
                 .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
@@ -412,7 +431,7 @@ struct PaletteView: View {
 
     // The highlighted app's front window, captured when it's highlighted; its icon until then
     // (or when it has no window, or Screen Recording isn't allowed).
-    func appPreview(_ app: RunningApp) -> some View {
+    func appPreview(_ app: AppItem) -> some View {
         Group {
             if let img = model.appPreviews[app.pid] {
                 Image(nsImage: img).resizable().aspectRatio(contentMode: .fit)
@@ -429,9 +448,9 @@ struct PaletteView: View {
         .task(id: app.pid) { model.loadPreview(app.pid) }
     }
 
-    func appRow(_ app: RunningApp, selected: Bool) -> some View {
+    func appRow(_ app: AppItem, selected: Bool) -> some View {
         HStack(spacing: 14) {
-            if let icon = app.icon {
+            if let icon = app.icon ?? app.path.map(NSWorkspace.shared.icon(forFile:)) {
                 Image(nsImage: icon).resizable().frame(width: 26, height: 26)
             }
             Text(app.name).font(.system(size: 15))

@@ -181,6 +181,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
         buildPanel()
         registerHotKey()
+        trackRecentApps()
         // `Normalcy --run "t h"` from a script or terminal runs a command in this instance,
         // against the frontmost app, as if typed in the bar.
         DistributedNotificationCenter.default().addObserver(forName: Self.runNotification, object: nil, queue: .main) {
@@ -332,6 +333,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         target = NSWorkspace.shared.frontmostApplication
         captureWindow()
         palette.apps = runningApps()
+        palette.installed = Self.installedApps()
         palette.text = ""
         palette.desktops = Desktops.read()
         loadWallpaper()
@@ -360,11 +362,45 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowDidResignKey(_ n: Notification) { if !continuing { hide() } }
 
     // Back to typing after a Shift+Enter command, against whatever app is now in front.
-    func runningApps() -> [RunningApp] {
-        NSWorkspace.shared.runningApplications
-            .filter { $0.activationPolicy == .regular && $0 != NSRunningApplication.current }
-            .map { RunningApp(name: $0.localizedName ?? "", icon: $0.icon, pid: $0.processIdentifier) }
+    // .app bundles in the Applications folders and one folder down (Utilities and the like).
+    static func installedApps() -> [AppItem] {
+        let fm = FileManager.default
+        let roots = ["/Applications", "/System/Applications", NSHomeDirectory() + "/Applications"]
+        var paths: [String] = []
+        for root in roots {
+            for entry in (try? fm.contentsOfDirectory(atPath: root)) ?? [] where !entry.hasPrefix(".") {
+                let path = root + "/" + entry
+                if entry.hasSuffix(".app") { paths.append(path); continue }
+                for sub in (try? fm.contentsOfDirectory(atPath: path)) ?? [] where sub.hasSuffix(".app") {
+                    paths.append(path + "/" + sub)
+                }
+            }
+        }
+        var seen = Set<String>()
+        return paths
+            .map { AppItem(name: fm.displayName(atPath: $0).replacingOccurrences(of: ".app", with: ""), path: $0) }
+            .filter { seen.insert($0.name).inserted }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    // Running apps, most recently used first (like Cmd+Tab), then the rest by name.
+    func runningApps() -> [AppItem] {
+        let rank = { (pid: pid_t) in self.recentApps.firstIndex(of: pid) ?? Int.max }
+        return NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular && $0 != NSRunningApplication.current }
+            .map { AppItem(name: $0.localizedName ?? "", icon: $0.icon, pid: $0.processIdentifier) }
+            .sorted { (rank($0.pid), $0.name.lowercased()) < (rank($1.pid), $1.name.lowercased()) }
+    }
+
+    var recentApps: [pid_t] = [] // pids by last activation, newest first, since Normalcy started
+    func trackRecentApps() {
+        if let front = NSWorkspace.shared.frontmostApplication { recentApps = [front.processIdentifier] }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                                                          object: nil, queue: .main) { [weak self] note in
+            guard let self, let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            recentApps.removeAll { $0 == app.processIdentifier }
+            recentApps.insert(app.processIdentifier, at: 0)
+        }
     }
 
     // The target window's frame, so resize commands can preview where it will go.
@@ -901,7 +937,7 @@ enum Main {
         // "b " lists running apps, filtered by what's typed; Enter switches to the highlighted one.
         let ap = Palette()
         ap.defs = { d }
-        ap.apps = ["Discord", "Safari", "Safari Technology Preview", "Slack"].map { RunningApp(name: $0) }
+        ap.apps = ["Discord", "Safari", "Safari Technology Preview", "Slack"].map { AppItem(name: $0) }
         var picked: String?
         ap.submit = { picked = $0 }
         ap.text = "b "
@@ -909,10 +945,17 @@ enum Main {
         ap.text = "b saf"
         precondition(ap.appMatches?.map(\.name) == ["Safari", "Safari Technology Preview"])
         ap.move(1)
+        ap.text = "b saf" // same text written back on a redraw keeps the highlight
         ap.enter()
         precondition(picked == "b Safari Technology Preview")
         ap.text = "o saf"
-        precondition(ap.appMatches == nil) // only after the switch command
+        ap.installed = [AppItem(name: "Safari", path: "/Applications/Safari.app"), AppItem(name: "Slack", path: "/Applications/Slack.app")]
+        precondition(ap.appMatches?.map(\.name) == ["Safari"]) // o lists installed apps
+        ap.enter()
+        precondition(picked == "o Safari")
+        ap.text = "d 2"
+        precondition(ap.appMatches == nil) // only after b and o
+        precondition(App.installedApps().contains { $0.name == "Safari" })
         // Discarding input: Ctrl+W drops a word, Esc clears before it closes.
         let e = Palette()
         var closed = false

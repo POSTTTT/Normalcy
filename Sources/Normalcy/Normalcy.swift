@@ -34,6 +34,11 @@ enum Command: Equatable {
         if let d = defs.first(where: { $0.enabled && ($0.trigger == word || arrowAction(word)?.rawValue == $0.id) }) {
             return d
         }
+        // An arrow can stand in for its letter inside a trigger: "←3" = "h3" (left third).
+        let spelled = word.map { ch in
+            arrowAction(String(ch)).flatMap { a in defs.first { $0.id == a.rawValue }?.trigger } ?? String(ch)
+        }.joined()
+        if spelled != word, let d = defs.first(where: { $0.enabled && $0.trigger == spelled }) { return d }
         guard word.count == 2 else { return nil }
         let corners: [Set<Action>: Action] = [
             [.left, .top]: .topLeft, [.right, .top]: .topRight, [.left, .bottom]: .bottomLeft, [.right, .bottom]: .bottomRight,
@@ -92,9 +97,9 @@ enum Command: Equatable {
         case .bottom: CGRect(x: 0, y: 0.5, width: 1, height: 0.5)
         case .full: CGRect(x: 0, y: 0, width: 1, height: 1)
         case .center: CGRect(x: 0.15, y: 0.1, width: 0.7, height: 0.8)
-        case .leftThird: CGRect(x: 0, y: 0, width: 1 / 3, height: 1)
-        case .centerThird: CGRect(x: 1 / 3, y: 0, width: 1 / 3, height: 1)
-        case .rightThird: CGRect(x: 2 / 3, y: 0, width: 1 / 3, height: 1)
+        case .leftThird: CGRect(x: 0, y: 0, width: 1.0 / 3, height: 1)
+        case .centerThird: CGRect(x: 1.0 / 3, y: 0, width: 1.0 / 3, height: 1)
+        case .rightThird: CGRect(x: 2.0 / 3, y: 0, width: 1.0 / 3, height: 1)
         case .topLeft: CGRect(x: 0, y: 0, width: 0.5, height: 0.5)
         case .topRight: CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5)
         case .bottomLeft: CGRect(x: 0, y: 0.5, width: 0.5, height: 0.5)
@@ -567,8 +572,11 @@ enum Main {
         q.text = "ha" // no exact match; selected row "Left Half" (title match) still previews
         precondition(q.layoutPreview == CGRect(x: 0, y: 0, width: 0.5, height: 1))
         // Thirds and quarters, by trigger, by arrows, and after t.
-        precondition(Command.parse("h3", d) == .layout(CGRect(x: 0, y: 0, width: 1 / 3, height: 1)))
-        precondition(Command.parse("l3", d) == .layout(CGRect(x: 2 / 3, y: 0, width: 1 / 3, height: 1)))
+        // Checked against plain numbers: CGRect also takes Ints, where 1 / 3 is 0.
+        precondition(Command.layoutRect(.leftThird)!.width > 0.33 && Command.layoutRect(.leftThird)!.width < 0.34)
+        precondition(Command.layoutRect(.rightThird)!.minX > 0.66)
+        precondition(Command.parse("h3", d) == .layout(CGRect(x: 0, y: 0, width: 1.0 / 3, height: 1)))
+        precondition(Command.parse("l3", d) == .layout(CGRect(x: 2.0 / 3, y: 0, width: 1.0 / 3, height: 1)))
         precondition(Command.parse("hk", d) == .layout(CGRect(x: 0, y: 0, width: 0.5, height: 0.5)))
         precondition(Command.parse("lj", d) == .layout(CGRect(x: 0.5, y: 0.5, width: 0.5, height: 0.5)))
         precondition(Command.parse("←↑", d) == Command.parse("hk", d))
@@ -579,8 +587,11 @@ enum Main {
         precondition(Command.parse("jl", d) == Command.parse("lj", d))
         precondition(Command.parse("h↑", d) == Command.parse("hk", d))
         precondition(Command.parse("hl", d) == nil) // left + right is no corner
+        precondition(Command.parse("←3", d) == Command.parse("h3", d))
+        precondition(Command.parse("→3", d) == Command.parse("l3", d))
+        precondition(Command.parse("t ←3", d) == .tabToWindow(Command.layoutRect(.leftThird)))
         precondition(Command.parse("t kh", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 0.5, height: 0.5)))
-        precondition(Command.parse("t c3", d) == .tabToWindow(CGRect(x: 1 / 3, y: 0, width: 1 / 3, height: 1)))
+        precondition(Command.parse("t c3", d) == .tabToWindow(CGRect(x: 1.0 / 3, y: 0, width: 1.0 / 3, height: 1)))
         let t = Palette()
         t.defs = { d }
         t.text = "h"

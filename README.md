@@ -39,7 +39,7 @@ These are the default triggers. Change them in Settings.
 
 ### Keys in the command bar
 
-- **Arrow keys** work like `h` `j` `k` `l`: ← is left, ↓ bottom, ↑ top, → right. Two arrows make a corner quarter, in either order: ← ↑ is top-left. After `t`, `d` or `m` they add the space for you, so `t` then ← becomes `t ←`. They keep working even if you rename those triggers.
+- **Arrow keys** work like `h` `j` `k` `l`: ← is left, ↓ bottom, ↑ top, → right. Two arrows make a corner quarter, in either order: ← ↑ is top-left. An arrow also stands in for its letter in other triggers, so ← 3 is the left third (`h3`). After `t`, `d` or `m` they add the space for you, so `t` then ← becomes `t ←`. They keep working even if you rename those triggers.
 - **Tab** / **Shift+Tab** or **Ctrl+N** / **Ctrl+P** move the highlight in the command list.
 - **Enter** on a highlighted command that needs more (like `o`) fills in its trigger so you can keep typing; other commands run straight away.
 

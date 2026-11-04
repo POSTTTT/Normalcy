@@ -75,6 +75,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let palette = Palette()
     var hotKey: EventHotKeyRef?
     var target: NSRunningApplication?
+    static let runNotification = Notification.Name("com.normalcy.run")
     var statusItem: NSStatusItem?
     lazy var settingsWindow: NSWindow = {
         let w = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
@@ -87,6 +88,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
         buildPanel()
         registerHotKey()
+        // `Normalcy --run "t h"` from a script or terminal runs a command in this instance,
+        // against the frontmost app, as if typed in the bar.
+        DistributedNotificationCenter.default().addObserver(forName: Self.runNotification, object: nil, queue: .main) {
+            [weak self] note in
+            guard let text = note.object as? String, let self else { return }
+            self.target = NSWorkspace.shared.frontmostApplication
+            self.palette.submit(text)
+        }
         buildStatusItem()
         CGRequestScreenCaptureAccess() // for desktop thumbnails
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -196,12 +205,20 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // The bar took key focus from the app's window. Hand it back first, or Safari
             // applies the command to a different tab than the one showing.
             target?.activate()
-            if let w = focusedWindow() { AXUIElementPerformAction(w, kAXRaiseAction as CFString) }
+            let origin = focusedWindow()
+            if let origin { AXUIElementPerformAction(origin, kAXRaiseAction as CFString) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                let before = self.windows()
                 guard self.pressMenuItem("Move Tab to New Window") else { return NSSound.beep() }
-                guard let layout else { return }
-                // The new window becomes the focused one once it has opened.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self.place(layout) }
+                guard let origin else { return }
+                self.waitForNewWindow(before: before) { new in
+                    // No new window: no tab moved out (e.g. only one tab), so leave things alone.
+                    guard let new else { return }
+                    // Safari opens the moved tab as the new window. Apps using standard macOS tabs
+                    // keep the moved tab's own window, and the tabs left behind become the new one.
+                    let movedIsNew = self.focusedWindow().map { CFEqual($0, new) } ?? false
+                    if let layout { self.place(layout, window: movedIsNew ? new : origin) }
+                }
             }
         case .settings:
             openSettings()
@@ -291,21 +308,30 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // Apps with native macOS tabs (Ghostty, Safari, Finder, Terminal...) list this under the Window menu.
     // Pressing it through Accessibility works no matter which menu or shortcut the app uses.
     func pressMenuItem(_ title: String) -> Bool {
-        guard let app = target else { return false }
-        func attr<T>(_ e: AXUIElement, _ name: String) -> T? {
-            var v: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(e, name as CFString, &v) == .success else { return nil }
-            return v as? T
-        }
+        guard let pid = target?.processIdentifier else { return false }
         // Menu bar > menu bar item > menu > menu item: 3 levels down.
         func find(_ e: AXUIElement, _ depth: Int) -> AXUIElement? {
-            if (attr(e, kAXTitleAttribute) as String?) == title { return e }
-            guard depth < 3, let kids: [AXUIElement] = attr(e, kAXChildrenAttribute) else { return nil }
+            if (axAttr(e, kAXTitleAttribute) as String?) == title { return e }
+            guard depth < 3, let kids: [AXUIElement] = axAttr(e, kAXChildrenAttribute) else { return nil }
             return kids.lazy.compactMap { find($0, depth + 1) }.first
         }
-        guard let bar: AXUIElement = attr(AXUIElementCreateApplication(app.processIdentifier), kAXMenuBarAttribute),
+        guard let bar: AXUIElement = axAttr(AXUIElementCreateApplication(pid), kAXMenuBarAttribute),
               let item = find(bar, 0) else { return false }
         return AXUIElementPerformAction(item, kAXPressAction as CFString) == .success
+    }
+
+    func windows() -> [AXUIElement] {
+        guard let app = target else { return [] }
+        return axAttr(AXUIElementCreateApplication(app.processIdentifier), kAXWindowsAttribute) ?? []
+    }
+
+    // Polls up to 1 s for a window that wasn't there before; how long it takes varies by app.
+    func waitForNewWindow(before: [AXUIElement], tries: Int = 20, then: @escaping (AXUIElement?) -> Void) {
+        if let w = windows().first(where: { w in !before.contains { CFEqual($0, w) } }) { return then(w) }
+        guard tries > 0 else { return then(nil) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            self.waitForNewWindow(before: before, tries: tries - 1, then: then)
+        }
     }
 
     func focusedWindow() -> AXUIElement? {
@@ -317,9 +343,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return (win as! AXUIElement)
     }
 
-    func place(_ f: CGRect) {
+    func place(_ f: CGRect, window: AXUIElement? = nil) {
         // shortcut: uses the screen with the panel, not the window's own screen; fix for multi-monitor
-        guard let w = focusedWindow(), let screen = NSScreen.main, let primary = NSScreen.screens.first else { return }
+        guard let w = window ?? focusedWindow(), let screen = NSScreen.main, let primary = NSScreen.screens.first else { return }
         let v = screen.visibleFrame
         // AX uses top-left origin of the primary screen; AppKit uses bottom-left.
         var origin = CGPoint(x: v.minX + v.width * f.minX, y: primary.frame.maxY - v.maxY + v.height * f.minY)
@@ -329,6 +355,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 }
 
+func axAttr<T>(_ e: AXUIElement, _ name: String) -> T? {
+    var v: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(e, name as CFString, &v) == .success else { return nil }
+    return v as? T
+}
+
 @main
 enum Main {
     static let app = App()
@@ -336,6 +368,11 @@ enum Main {
     static func main() {
         if CommandLine.arguments.contains("--selftest") { selfTest(); return }
         if CommandLine.arguments.contains("--desktops") { print(Desktops.read()); return }
+        if let i = CommandLine.arguments.firstIndex(of: "--run"), i + 1 < CommandLine.arguments.count {
+            DistributedNotificationCenter.default().postNotificationName(
+                App.runNotification, object: CommandLine.arguments[i + 1], deliverImmediately: true)
+            return
+        }
         NSApplication.shared.setActivationPolicy(.accessory)
         NSApplication.shared.delegate = app
         NSApplication.shared.run()

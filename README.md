@@ -13,7 +13,7 @@ A keyboard command bar for macOS, inspired by Neovim. Press a hotkey, type a sho
 swift run Normalcy
 ```
 
-Press **Option+Space** to open the command bar. **Enter** runs the command; **Shift+Enter** runs it and brings the bar back for the next one; **Esc** closes the bar.
+Press **Option+Space** (change it in Settings > General) to open the command bar. **Enter** runs the command; **Shift+Enter** runs it and keeps the bar open for the next one; **Esc** closes the bar.
 
 ## Commands
 
@@ -111,5 +111,4 @@ swift build && .build/debug/Normalcy --selftest
 - Reading desktops uses a private macOS function, since there's no public one. A future macOS update could break it.
 - `m` works by briefly dragging the window by its title bar while switching desktops. It fails on windows with no empty title bar space just right of the green button.
 - `t` clicks the app's "Move Tab to New Window" menu item, so it only works in apps that have one (Safari, Finder, Terminal, Ghostty and other apps using standard macOS tabs) and only when macOS is set to English.
-- The hotkey is fixed at Option+Space.
 - You can rename and hide the built-in commands, but you can't add new ones yet.

@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import Combine
 import SwiftUI
 
 // Commands (default triggers, editable in Settings):
@@ -127,6 +128,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let palette = Palette()
     let preview = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
     var hotKey: EventHotKeyRef?
+    var subs = Set<AnyCancellable>()
     var target: NSRunningApplication?
     static let runNotification = Notification.Name("com.normalcy.run")
     var statusItem: NSStatusItem?
@@ -220,16 +222,18 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         palette.submitContinuing = { [weak self] text in
             guard let self, let cmd = Command.parse(text, Store.shared.defs) else { return NSSound.beep() }
-            self.hide()
-            self.run(cmd)
-            // Reopen once the command has landed: desktop switches slide for a while, the rest are quick.
-            // shortcut: fixed delays, not completion callbacks; lengthen if the bar comes back too early.
+            // The bar stays up. Commands that activate an app take focus from it, so it
+            // ignores losing focus until it takes it back once the command has landed.
+            continuing = true
+            palette.text = ""
+            run(cmd)
+            // shortcut: fixed delays, not completion callbacks; lengthen if focus comes back too early.
             let wait: Double = switch cmd {
             case .ctrlKey, .moveToDesktop: 0.7
             case .tabToWindow, .open: 0.6
             default: 0.2
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.show() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.refocus() }
         }
         palette.cancel = { [weak self] in self?.hide() }
         panel.contentView = NSHostingView(rootView: PaletteView(model: palette))
@@ -252,16 +256,23 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.delegate = self
     }
 
-    // Option+Space. Carbon hotkeys need no Accessibility permission.
+    // The shortcut from Settings (Option+Space by default), re-registered whenever it changes.
+    // Carbon hotkeys need no Accessibility permission.
     func registerHotKey() {
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         InstallEventHandler(GetApplicationEventTarget(), { _, _, ctx in
             Unmanaged<App>.fromOpaque(ctx!).takeUnretainedValue().show()
             return noErr
         }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), nil)
-        RegisterEventHotKey(UInt32(kVK_Space), UInt32(optionKey),
-                            EventHotKeyID(signature: OSType(0x4E524D4C), id: 1),
-                            GetApplicationEventTarget(), 0, &hotKey)
+        let store = Store.shared
+        store.$hotKey.combineLatest(store.$recordingHotKey).sink { [weak self] key, recording in
+            guard let self else { return }
+            if let hotKey { UnregisterEventHotKey(hotKey); self.hotKey = nil }
+            if recording { return }
+            let status = RegisterEventHotKey(key.keyCode, key.modifiers, EventHotKeyID(signature: OSType(0x4E524D4C), id: 1),
+                                             GetApplicationEventTarget(), 0, &hotKey)
+            store.hotKeyTaken = status != noErr
+        }.store(in: &subs)
     }
 
     func show() {
@@ -290,7 +301,18 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         palette.visible = false
     }
 
-    func windowDidResignKey(_ n: Notification) { hide() }
+    var continuing = false // Shift+Enter ran a command; keep the bar while it runs
+    func windowDidResignKey(_ n: Notification) { if !continuing { hide() } }
+
+    // Back to typing after a Shift+Enter command, against whatever app is now in front.
+    func refocus() {
+        continuing = false
+        guard panel.isVisible else { return }
+        target = NSWorkspace.shared.frontmostApplication
+        palette.desktops = Desktops.read()
+        panel.makeKeyAndOrderFront(nil)
+        palette.focusToken += 1
+    }
 
     func run(_ cmd: Command) {
         switch cmd {
@@ -653,6 +675,15 @@ enum Main {
         precondition(h.argPlaceholder == nil)
         h.text = "h "
         precondition(h.argPlaceholder == nil)
+        // Recorded shortcuts need Control, Option or Command, and read like the menu bar.
+        func keyEvent(_ f: NSEvent.ModifierFlags, _ chars: String, _ code: Int) -> NSEvent {
+            NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: f, timestamp: 0, windowNumber: 0,
+                             context: nil, characters: chars, charactersIgnoringModifiers: chars, isARepeat: false,
+                             keyCode: UInt16(code))!
+        }
+        precondition(HotKey(event: keyEvent([.option], " ", kVK_Space)) == .standard)
+        precondition(HotKey(event: keyEvent([.command, .shift], "k", kVK_ANSI_K))?.label == "⇧⌘ K")
+        precondition(HotKey(event: keyEvent([.shift], "k", kVK_ANSI_K)) == nil)
         // Every default trigger is unique.
         precondition(Set(d.map(\.trigger)).count == d.count)
         print("selftest ok")

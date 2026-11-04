@@ -1,3 +1,4 @@
+import Carbon
 import SwiftUI
 
 enum Action: String, CaseIterable {
@@ -155,6 +156,37 @@ struct CommandDef: Codable, Identifiable, Equatable {
     }
 }
 
+// Global shortcut that opens the bar. Modifiers are Carbon flags, as RegisterEventHotKey takes them.
+struct HotKey: Codable, Equatable {
+    var keyCode: UInt32
+    var modifiers: UInt32
+    var label: String
+
+    static let standard = HotKey(keyCode: UInt32(kVK_Space), modifiers: UInt32(optionKey), label: "⌥ Space")
+
+    // nil unless Control, Option or Command is held: a bare key would fire while typing.
+    // shortcut: F-keys and other special keys get a raw character as label; name them if they're used.
+    init?(event e: NSEvent) {
+        let f = e.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard !f.intersection([.control, .option, .command]).isEmpty else { return nil }
+        let mods: [(NSEvent.ModifierFlags, Int, String)] = [
+            (.control, controlKey, "⌃"), (.option, optionKey, "⌥"), (.shift, shiftKey, "⇧"), (.command, cmdKey, "⌘"),
+        ]
+        let held = mods.filter { f.contains($0.0) }
+        let names: [Int: String] = [
+            kVK_Space: "Space", kVK_Return: "Return", kVK_Tab: "Tab", kVK_Delete: "Delete",
+            kVK_LeftArrow: "←", kVK_RightArrow: "→", kVK_DownArrow: "↓", kVK_UpArrow: "↑",
+        ]
+        let key = names[Int(e.keyCode)] ?? (e.charactersIgnoringModifiers ?? "?").uppercased()
+        self.init(keyCode: UInt32(e.keyCode), modifiers: UInt32(held.reduce(0) { $0 | $1.1 }),
+                  label: held.map(\.2).joined() + " " + key)
+    }
+
+    init(keyCode: UInt32, modifiers: UInt32, label: String) {
+        self.keyCode = keyCode; self.modifiers = modifiers; self.label = label
+    }
+}
+
 enum Style: String, CaseIterable { case bar, minimal }
 enum Position: String, CaseIterable { case top, center, bottom }
 
@@ -174,6 +206,13 @@ final class Store: ObservableObject {
     @Published var position = Position(rawValue: UserDefaults.standard.string(forKey: "position") ?? "") ?? .bottom {
         didSet { UserDefaults.standard.set(position.rawValue, forKey: "position") }
     }
+
+    @Published var hotKey = UserDefaults.standard.data(forKey: "hotKey")
+        .flatMap { try? JSONDecoder().decode(HotKey.self, from: $0) } ?? .standard {
+        didSet { UserDefaults.standard.set(try? JSONEncoder().encode(hotKey), forKey: "hotKey") }
+    }
+    @Published var recordingHotKey = false // the shortcut is paused while a new one is typed
+    @Published var hotKeyTaken = false // registering failed: another app holds this shortcut
 
     @Published var defs: [CommandDef] {
         didSet { UserDefaults.standard.set(try? JSONEncoder().encode(defs), forKey: key) }
@@ -213,8 +252,10 @@ struct GeneralSettings: View {
     var body: some View {
         Form {
             Section("Activation") {
-                LabeledContent("Shortcut") {
-                    Text("⌥ Space").font(.system(.body, design: .monospaced))
+                LabeledContent("Shortcut") { ShortcutRecorder() }
+                if store.hotKeyTaken {
+                    Text("Another app already uses this shortcut. Pick a different one.")
+                        .font(.caption).foregroundStyle(.red)
                 }
             }
             Section {
@@ -339,5 +380,39 @@ struct CommandRow: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
         }
+    }
+}
+
+// Click, then press the new shortcut. Esc cancels.
+struct ShortcutRecorder: View {
+    @ObservedObject var store = Store.shared
+    @State private var monitor: Any?
+
+    var body: some View {
+        HStack {
+            if store.hotKey != .standard, !store.recordingHotKey {
+                Button("Reset") { store.hotKey = .standard }
+            }
+            Button(store.recordingHotKey ? "Type shortcut…" : store.hotKey.label) {
+                store.recordingHotKey ? stop() : start()
+            }
+            .font(.system(.body, design: .monospaced))
+        }
+        .onDisappear(perform: stop)
+    }
+
+    func start() {
+        store.recordingHotKey = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { e in
+            if e.keyCode == UInt16(kVK_Escape) { stop() }
+            else if let k = HotKey(event: e) { store.hotKey = k; stop() }
+            return nil // swallow keys while recording
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        store.recordingHotKey = false
     }
 }

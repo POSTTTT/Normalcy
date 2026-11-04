@@ -6,7 +6,7 @@ final class Palette: ObservableObject {
     @Published var focusToken = 0 // bumped on every show to refocus the field
     @Published var visible = false // drives the entrance; reset while hidden so each open animates
     var submit: (String) -> Void = { _ in }
-    var submitContinuing: (String) -> Void = { _ in } // runs, then reopens the bar for the next command
+    var submitContinuing: (String) -> Void = { _ in } // runs, keeping the bar open for the next command
     var cancel: () -> Void = {}
     var defs: () -> [CommandDef] = { Store.shared.defs }
     @Published var desktops = Desktops()

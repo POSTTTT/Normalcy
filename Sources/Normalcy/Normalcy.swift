@@ -487,10 +487,12 @@ enum Main {
         p.text = "f"
         precondition(p.desktopCommand == nil)
         // Minimal style key-cap blocks.
+        precondition(Palette.keyBlocks("", showSpaces: false) == [""]) // empty block on open
         precondition(Palette.keyBlocks("o Safari", showSpaces: false) == ["o", "Safari"])
         precondition(Palette.keyBlocks("o Safari", showSpaces: true) == ["o", "␣", "Safari"])
-        precondition(Palette.keyBlocks("   ", showSpaces: false) == [])
-        precondition(Palette.keyBlocks("d ", showSpaces: true) == ["d", "␣"])
+        precondition(Palette.keyBlocks("o ", showSpaces: false) == ["o", ""]) // space pops a new block
+        precondition(Palette.keyBlocks("   ", showSpaces: false) == [""])
+        precondition(Palette.keyBlocks("d ", showSpaces: true) == ["d", "␣", ""])
         precondition(Palette.keyBlocks("←↓", showSpaces: false) == ["←↓"])
         precondition(Palette.spacedArrows("←↓") == "←\u{2009}↓")
         precondition(Palette.spacedArrows("set") == "set")

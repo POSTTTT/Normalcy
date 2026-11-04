@@ -58,6 +58,8 @@ final class Palette: ObservableObject {
     }
 
     // Minimal style's key-cap blocks: one per word, plus a "␣" block per space if asked.
+    // An empty block at the end is where the next word goes: there when nothing is typed
+    // yet, and again after each space.
     static func keyBlocks(_ text: String, showSpaces: Bool) -> [String] {
         var out: [String] = [], word = ""
         for ch in text {
@@ -65,7 +67,7 @@ final class Palette: ObservableObject {
             if !word.isEmpty { out.append(word); word = "" }
             if showSpaces { out.append("␣") }
         }
-        if !word.isEmpty { out.append(word) }
+        out.append(word) // the word being typed, or an empty block waiting for one
         return out
     }
 
@@ -111,6 +113,11 @@ struct PaletteView: View {
     @ObservedObject var model: Palette
     @ObservedObject var store = Store.shared
     @FocusState private var focused: Bool
+    @Namespace private var selection
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // Movement is dropped under Reduce Motion; fades stay, since they still explain the change.
+    func motion(_ duration: Double) -> Animation? { reduceMotion ? nil : .uiEaseOut(duration) }
 
     var body: some View {
         let minimal = store.style == .minimal
@@ -137,6 +144,8 @@ struct PaletteView: View {
                     content
                 }
             }
+            // Desktop thumbnails fade in when a desktop command is typed.
+            .animation(motion(0.18) ?? .linear(duration: 0.1), value: model.desktopCommand?.id)
             .padding(20) // room for the shadow
             .padding(.top, position == .top ? g.size.height * 0.15 : 0)
             .padding(.bottom, position == .bottom ? g.size.height * 0.08 : 0)
@@ -173,32 +182,41 @@ struct PaletteView: View {
         let rows = model.matches
         if let cmd = model.desktopCommand, model.desktops.count > 0 {
             desktopStrip(cmd)
+                .transition(.opacity.combined(with: .scale(scale: 0.97)))
         }
         if store.showList, !rows.isEmpty {
             VStack(spacing: 2) {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { i, d in
                     row(d, selected: i == model.selected)
                         .onTapGesture { model.selected = i; model.enter() }
+                        .transition(.opacity)
                 }
             }
             .padding(8)
             .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            // Filtering: rows fade and the panel resizes instead of jumping.
+            .animation(motion(0.18) ?? .linear(duration: 0.1), value: rows.map(\.id))
+            .animation(motion(0.15), value: model.selected)
         }
     }
 
-    // Minimal style: one key-cap block per typed word, so "o Safari" shows [o] [Safari];
-    // nothing when empty. shortcut: long input runs past the panel edge; wrap if that becomes a problem.
+    // Minimal style: one key-cap block per typed word, so "o Safari" shows [o] [Safari],
+    // plus an empty block for the next word. New blocks pop in.
+    // shortcut: long input runs past the panel edge; wrap if that becomes a problem.
     var keys: some View {
-        HStack(spacing: 8) {
-            ForEach(Array(Palette.keyBlocks(model.text, showSpaces: store.showSpaces).enumerated()),
-                    id: \.offset) { _, word in
-                Text(Palette.spacedArrows(String(word)))
+        let blocks = Palette.keyBlocks(model.text, showSpaces: store.showSpaces)
+        return HStack(spacing: 8) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, word in
+                Text(Palette.spacedArrows(word))
                     .font(.system(size: 22, weight: .medium, design: .monospaced))
                     .padding(.horizontal, 14)
                     .frame(minWidth: 44, minHeight: 44)
                     .glass(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .transition(reduceMotion ? .opacity : .scale(scale: 0.9).combined(with: .opacity))
             }
         }
+        // Typed many times a day, so quick and without bounce.
+        .animation(motion(0.15) ?? .linear(duration: 0.1), value: blocks)
     }
 
     // Mission Control-style thumbnails: target gets the accent border, current a faint one.
@@ -231,6 +249,7 @@ struct PaletteView: View {
         .frame(maxWidth: .infinity)
         .padding(14)
         .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .animation(motion(0.15) ?? .linear(duration: 0.1), value: model.desktopTarget)
     }
 
     @ViewBuilder func thumbnail(_ id: Int) -> some View {
@@ -255,8 +274,14 @@ struct PaletteView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 40)
-        .background(selected ? Color.primary.opacity(0.1) : .clear,
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background {
+            // One highlight that slides between rows, so the eye follows the selection.
+            if selected {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.primary.opacity(0.1))
+                    .matchedGeometryEffect(id: "selection", in: selection)
+            }
+        }
         .contentShape(Rectangle())
     }
 }
@@ -265,6 +290,7 @@ struct PaletteView: View {
 // like macOS's own tiling preview.
 struct LayoutPreview: View {
     @ObservedObject var model: Palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { g in
@@ -275,10 +301,17 @@ struct LayoutPreview: View {
                         .strokeBorder(Color.white.opacity(0.55), lineWidth: 2))
                     .frame(width: g.size.width * r.width - 16, height: g.size.height * r.height - 16)
                     .position(x: g.size.width * r.midX, y: g.size.height * r.midY)
-                    .animation(.spring(duration: 0.25), value: r)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97)))
             }
         }
+        // Switching h to l slides the box across (spatial: shows where the window goes).
+        .animation(reduceMotion ? .linear(duration: 0.1) : .spring(duration: 0.25, bounce: 0), value: model.layoutPreview)
     }
+}
+
+extension Animation {
+    // Strong ease-out for UI state changes (fast start, soft landing).
+    static func uiEaseOut(_ duration: Double) -> Animation { .timingCurve(0.23, 1, 0.32, 1, duration: duration) }
 }
 
 extension View {

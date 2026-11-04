@@ -134,7 +134,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let vc = NSHostingController(rootView: view)
             vc.sizingOptions = []
             vc.preferredContentSize = NSSize(width: 560, height: height) // the window resizes to this per tab
-            vc.title = title // shown as the window title
             let item = NSTabViewItem(viewController: vc)
             item.label = title
             item.image = NSImage(systemSymbolName: icon, accessibilityDescription: title)
@@ -142,6 +141,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let w = NSWindow(contentViewController: tabs)
         w.toolbarStyle = .preference
+        w.titleVisibility = .hidden // the selected tab already names the page
         w.styleMask.remove(.resizable)
         w.isReleasedWhenClosed = false
         return w

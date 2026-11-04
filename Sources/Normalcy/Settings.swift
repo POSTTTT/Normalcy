@@ -77,6 +77,19 @@ enum Action: String, CaseIterable {
         }
     }
 
+    // Section the command is listed under in Settings.
+    var group: String {
+        switch self {
+        case .open, .focus: "Apps"
+        case .desktop, .move, .tab: "Desktops & Tabs"
+        case .left, .right, .top, .bottom: "Halves"
+        case .leftThird, .centerThird, .rightThird: "Thirds"
+        case .topLeft, .topRight, .bottomLeft, .bottomRight: "Quarters"
+        case .full, .center: "Fill & Center"
+        case .settings: "Other"
+        }
+    }
+
     // nil when the command takes no argument.
     var argHint: String? {
         switch self {
@@ -191,12 +204,16 @@ struct CommandSettings: View {
     @ObservedObject var store = Store.shared
 
     var body: some View {
+        let groups = Action.allCases.map(\.group).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
         Form {
-            Section {
-                ForEach($store.defs) { $d in
-                    CommandRow(def: $d, problem: store.problem(d))
+            ForEach(groups, id: \.self) { g in
+                Section(g) {
+                    ForEach(store.defs.indices.filter { Action(rawValue: store.defs[$0].id)?.group == g }, id: \.self) { i in
+                        CommandRow(def: $store.defs[i], problem: store.problem(store.defs[i]))
+                    }
                 }
-            } footer: {
+            }
+            Section {} footer: {
                 HStack(alignment: .top) {
                     Text("The trigger is what you type. Switch a command off to hide it.\nArrow keys work like h j k l. Tab or Ctrl+N / Ctrl+P move through the list.")
                         .font(.caption).foregroundStyle(.secondary)

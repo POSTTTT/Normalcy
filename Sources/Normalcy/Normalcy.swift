@@ -193,10 +193,34 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         snapshotDesktop()
     }
 
+    var thumbWindows: [Int: Set<CGWindowID>] = [:] // space ID -> windows its thumbnail shows
+    // Windows last seen actually showing. Apps keep closed windows around, and from another desktop
+    // they can't be told from open ones, so only windows seen on screen get drawn into thumbnails.
+    var seen = Set<CGWindowID>()
+
+    // The current desktop is captured as it looks. Others can't be, so any whose windows changed
+    // since their thumbnail (or that have none yet) get one rebuilt from their windows.
     func snapshotDesktop() {
-        guard let id = Desktops.read().currentID else { return }
+        let desks = Desktops.read()
+        let settings = settingsWindow.isVisible ? [CGWindowID(settingsWindow.windowNumber)] : []
+        let all = Snapshot.windowsBySpace(also: Set(settings))
+        for w in desks.currentID.flatMap({ all[$0] }) ?? [] {
+            if w.onScreen { seen.insert(w.id) } else { seen.remove(w.id) }
+        }
+        let windows = all.mapValues { $0.filter { seen.contains($0.id) } }
         Task { @MainActor in
-            if let img = await Snapshot.capture() { palette.thumbs[id] = img }
+            if let id = desks.currentID, let img = await Snapshot.capture(excluding: [panel, preview]) {
+                palette.thumbs[id] = img
+                // Wallpaper as it really renders; the file on disk isn't always readable.
+                if let bare = await Snapshot.capture(excluding: [panel, preview], bare: true) { palette.wallpaper = bare }
+                thumbWindows[id] = Set(windows[id, default: []].map(\.id))
+            }
+            for id in desks.ids where id != desks.currentID {
+                let ws = windows[id, default: []], ids = Set(ws.map(\.id))
+                guard thumbWindows[id] != ids, let img = await Snapshot.compose(ws, wallpaper: palette.wallpaper) else { continue }
+                palette.thumbs[id] = img
+                thumbWindows[id] = ids
+            }
         }
     }
 
@@ -333,6 +357,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         target = NSWorkspace.shared.frontmostApplication
         captureWindow()
         palette.desktops = Desktops.read()
+        snapshotDesktop() // the command may have changed this desktop
         panel.makeKeyAndOrderFront(nil)
         palette.focusToken += 1
     }
@@ -570,7 +595,7 @@ enum Main {
 
     static func main() {
         if CommandLine.arguments.contains("--selftest") { selfTest(); return }
-        if CommandLine.arguments.contains("--desktops") { print(Desktops.read()); return }
+        if CommandLine.arguments.contains("--desktops") { print(Desktops.read(), Snapshot.windowsBySpace().mapValues(\.count)); return }
         if let i = CommandLine.arguments.firstIndex(of: "--run"), i + 1 < CommandLine.arguments.count {
             DistributedNotificationCenter.default().postNotificationName(
                 App.runNotification, object: CommandLine.arguments[i + 1], deliverImmediately: true)

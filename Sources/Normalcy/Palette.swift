@@ -76,7 +76,12 @@ final class Palette: ObservableObject {
     var matches: [CommandDef] {
         let defs = self.defs().filter(\.enabled)
         let s = text.drop { $0 == " " }
-        guard let head = s.split(separator: " ").first.map(String.init) else { return defs }
+        // Nothing typed: the named commands first, then the window commands, so the grid style
+        // shows one block of rows above one grid.
+        guard let head = s.split(separator: " ").first.map(String.init) else {
+            let isWindow = { (d: CommandDef) in Action(rawValue: d.id)?.isWindow == true }
+            return defs.filter { !isWindow($0) } + defs.filter(isWindow)
+        }
         if s.contains(" ") { return defs.filter { $0.trigger == head } }
         let exact = Command.lookup(head, in: defs).map { [$0] } ?? []
         let prefix = defs.filter { $0.trigger != head && $0.trigger.hasPrefix(head) && !exact.contains($0) }
@@ -390,16 +395,22 @@ struct PaletteView: View {
             VStack(spacing: 2) {
                 ForEach(runs, id: \.first!.element.id) { run in
                     if Action(rawValue: run[0].element.id)?.isWindow == true {
+                        sectionHeader("Windows", first: run[0].offset == 0)
                         LazyVGrid(columns: Array(repeating: GridItem(.fixed(60), spacing: 6), count: 8), spacing: 6) {
                             ForEach(run, id: \.element.id) { i, d in tile(i, d) }
                         }
-                        .padding(.vertical, 6)
-                        // Tiles have no titles; name the highlighted one.
-                        if let sel = run.first(where: { $0.offset == model.selected }) {
-                            Text(Action(rawValue: sel.element.id)?.title ?? "")
-                                .font(.system(size: 12)).foregroundStyle(.secondary)
-                                .padding(.bottom, 4)
+                        .padding(.bottom, 4)
+                        // Tiles have no titles; name the highlighted one, with what it does.
+                        Group {
+                            if let sel = run.first(where: { $0.offset == model.selected }) {
+                                Text(Action(rawValue: sel.element.id)?.title ?? "")
+                            } else {
+                                Text("Use Tab to see each name")
+                            }
                         }
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .frame(height: 18)
+                        .padding(.bottom, 6)
                     } else {
                         ForEach(run, id: \.element.id) { i, d in tappableRow(i, d, height: 40) }
                     }
@@ -415,9 +426,7 @@ struct PaletteView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(items, id: \.element.id) { i, d in
                             if headerAt.contains(i) {
-                                Text((Action(rawValue: d.id)?.group ?? "").uppercased())
-                                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-                                    .padding(.horizontal, 16).padding(.top, i == 0 ? 4 : 10).padding(.bottom, 4)
+                                sectionHeader(Action(rawValue: d.id)?.group ?? "", first: i == 0)
                             }
                             tappableRow(i, d, height: 34).id(d.id)
                         }
@@ -471,6 +480,14 @@ struct PaletteView: View {
         .contentShape(Rectangle())
     }
 
+    // Group name above a run of rows or tiles; the first one sits closer to the top.
+    func sectionHeader(_ title: String, first: Bool) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16).padding(.top, first ? 4 : 10).padding(.bottom, 4)
+    }
+
     func tappableRow(_ i: Int, _ d: CommandDef, height: CGFloat) -> some View {
         row(d, selected: i == model.selected, height: height)
             .onTapGesture { model.selected = i; model.enter() }
@@ -480,11 +497,11 @@ struct PaletteView: View {
     // Grid style: icon with the trigger under it; the full name shows below the grid when highlighted.
     func tile(_ i: Int, _ d: CommandDef) -> some View {
         let a = Action(rawValue: d.id)
-        return VStack(spacing: 5) {
+        return VStack(spacing: 6) {
             Image(systemName: a?.icon ?? "questionmark").font(.system(size: 18))
-            Text(d.trigger).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+            KeyCap(d.trigger)
         }
-        .frame(width: 60, height: 56)
+        .frame(width: 60, height: 62)
         .background {
             if i == model.selected {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -506,9 +523,13 @@ struct PaletteView: View {
                 .frame(width: 24)
             Text(a?.title ?? d.id).font(.system(size: 15))
             Spacer()
-            Text(d.trigger + (a?.argHint.map { " ‹\(Command.spell($0, model.defs()))›" } ?? ""))
-                .font(.system(size: 13, design: .monospaced))
-                .foregroundStyle(.secondary)
+            // What to type: the trigger as a key, then what goes after it.
+            HStack(spacing: 6) {
+                KeyCap(d.trigger)
+                if let arg = a?.argName {
+                    Text(arg).font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+            }
         }
         .padding(.horizontal, 16)
         .frame(height: height)

@@ -11,7 +11,7 @@ short commands for apps, desktops, tabs and windows, without touching the mouse.
 
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-black)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-F05138?logo=swift&logoColor=white)](https://swift.org)
-[![Keys](https://img.shields.io/badge/keys-h%20j%20k%20l-4C6EF5)](#commands)
+[![Keys](https://img.shields.io/badge/keys-h%20j%20k%20l-4C6EF5)](#cheatsheet)
 
 </div>
 
@@ -59,58 +59,16 @@ Normalcy lives in the menu bar as a ⌘ icon. On first launch macOS asks for:
 
 ## Using it
 
-Press **Option+Space** to open the command bar, type a command, press **Return**.
+Press **Option+Space**, type a command, press **Return**. Every command and key is
+on the [cheatsheet](#cheatsheet).
 
-| Key | What it does |
-| --- | --- |
-| **Return** | Run the command |
-| **⇧ Return** | Run it and keep the bar open for the next one |
-| **Tab** / **⌃N** | Next in the list (**⇧ Tab** / **⌃P** for the previous one) |
-| **← ↓ ↑ →** | Same as `h` `j` `k` `l`. Two arrows make a corner: ← ↑ is top-left |
-| **Esc** | Clear what you typed, or close the bar when nothing is typed |
-| **⌃U** / **⌃W** | Clear everything / delete the last word |
-
-Return on a highlighted command that needs more (like `o`) fills in its trigger
-so you can keep typing. The list matches by trigger or by name: `half` finds all
-four half-screen commands.
-
-## Commands
-
-These are the default triggers. Change any of them in Settings.
-
-### Apps
-
-| Command | Action |
-| --- | --- |
-| `o Safari` | Open or launch an app. The list shows your installed apps |
-| `b saf` | Switch to a running app whose name starts with the text. The list shows what Cmd+Tab shows: apps with a window on this desktop, plus Finder, most recent first |
-| `b h` / `b l` / `b k` / `b j` | Switch to the nearest window on the left / right / above / below |
-
-### Desktops and tabs
-
-| Command | Action |
-| --- | --- |
-| `d 2` | Go to desktop 2 (1–9) |
-| `d h` / `d l` | Go to the desktop on the left / right |
-| `m 2` / `m h` / `m l` | Move the current window to desktop 2 / left / right, and follow it |
-| `t` | Move the current tab into its own window |
-| `t h` | Move the current tab into its own window, on the left half (any window position works) |
-
-### Windows
-
-| Command | Action |
-| --- | --- |
-| `h` / `l` / `k` / `j` | Left / right / top / bottom half |
-| `h3` / `c3` / `l3` | Left / center / right third |
-| `hk` / `lk` / `hj` / `lj` | Top-left / top-right / bottom-left / bottom-right quarter |
-| `f` / `c` | Fill the screen / center the window |
-| `+` / `-` | 10% bigger / smaller, staying centered |
-| `re l` / `re h` / `re j` / `re k` | Wider / narrower / taller / shorter by 5% of the screen. Repeat the key for more steps: `re ll` |
-| `s` then `j` / `k` / `h` / `l` | Scroll down / up / left / right as you press the keys, no Return needed. Esc stops |
-| `set` | Open Settings |
-
-When two windows sit side by side, resizing one resizes the other: grow the left
-window and the right one gives up the space.
+- **Shift+Return** runs a command and keeps the bar open for the next one.
+- Return on a highlighted command that needs more (like `o`) fills in its
+  trigger so you can keep typing.
+- The list matches by trigger or by name: `half` finds all four half-screen
+  commands.
+- `b`'s app list shows what Cmd+Tab shows: apps with a window on this desktop,
+  plus Finder, most recent first.
 
 ## Settings
 

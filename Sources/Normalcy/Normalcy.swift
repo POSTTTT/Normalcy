@@ -77,9 +77,27 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var target: NSRunningApplication?
     static let runNotification = Notification.Name("com.normalcy.run")
     var statusItem: NSStatusItem?
+    // Standard macOS settings window: tabs as toolbar icons, window resizes to each tab.
     lazy var settingsWindow: NSWindow = {
-        let w = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
-        w.title = "Normalcy Settings"
+        let tabs = NSTabViewController()
+        tabs.tabStyle = .toolbar
+        let pages: [(String, String, AnyView, CGFloat)] = [
+            ("General", "gearshape", AnyView(GeneralSettings()), 440),
+            ("Commands", "command", AnyView(CommandSettings()), 680),
+        ]
+        for (title, icon, view, height) in pages {
+            let vc = NSHostingController(rootView: view)
+            vc.sizingOptions = []
+            vc.preferredContentSize = NSSize(width: 560, height: height) // the window resizes to this per tab
+            vc.title = title // shown as the window title
+            let item = NSTabViewItem(viewController: vc)
+            item.label = title
+            item.image = NSImage(systemSymbolName: icon, accessibilityDescription: title)
+            tabs.addTabViewItem(item)
+        }
+        let w = NSWindow(contentViewController: tabs)
+        w.toolbarStyle = .preference
+        w.styleMask.remove(.resizable)
         w.isReleasedWhenClosed = false
         return w
     }()

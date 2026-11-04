@@ -67,20 +67,14 @@ enum Action: String, CaseIterable {
     // Enter on the row fills in the trigger instead of running, so an argument can be typed.
     var argRequired: Bool { argHint != nil && self != .tab }
 
-    var help: String {
+    // Usage shown under the command in Settings; <trigger> is replaced with the current trigger.
+    var example: String? {
         switch self {
-        case .open: "Open app — <trigger> Safari"
-        case .focus: "Switch to running app — <trigger> saf"
-        case .desktop: "Go to desktop — <trigger> 2 / h / l"
-        case .move: "Move window to desktop — <trigger> 2 / h / l"
-        case .tab: "Move tab to new window — <trigger>, or <trigger> h to place it left"
-        case .left: "Window: left half"
-        case .right: "Window: right half"
-        case .top: "Window: top half"
-        case .bottom: "Window: bottom half"
-        case .full: "Window: full screen"
-        case .center: "Window: center"
-        case .settings: "Open these settings"
+        case .open: "<trigger> Safari"
+        case .focus: "<trigger> saf — matches the start of the app name"
+        case .desktop, .move: "<trigger> 2, or <trigger> h / <trigger> l for left / right"
+        case .tab: "<trigger>, or <trigger> h to put the new window on the left"
+        default: nil
         }
     }
 }
@@ -126,59 +120,107 @@ final class Store: ObservableObject {
 
     func problem(_ d: CommandDef) -> String? {
         guard d.enabled else { return nil }
-        if d.trigger.isEmpty { return "empty" }
-        if d.trigger.contains(" ") { return "no spaces" }
-        if defs.contains(where: { $0.id != d.id && $0.enabled && $0.trigger == d.trigger }) { return "duplicate" }
+        if d.trigger.isEmpty { return "Needs a trigger" }
+        if d.trigger.contains(" ") { return "Triggers can't contain spaces" }
+        if let other = defs.first(where: { $0.id != d.id && $0.enabled && $0.trigger == d.trigger }) {
+            return "Same trigger as \(Action(rawValue: other.id)?.title ?? other.id)"
+        }
         return nil
     }
 }
 
-struct SettingsView: View {
+struct GeneralSettings: View {
     @ObservedObject var store = Store.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Picker("Style", selection: $store.style) {
-                Text("Command bar").tag(Style.bar)
-                Text("Minimal").tag(Style.minimal)
-            }
-            .pickerStyle(.segmented)
-            Picker("Position", selection: $store.position) {
-                ForEach(Position.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .disabled(store.style == .bar)
-            .help("Where the minimal style shows the typed letters")
-            Toggle("Show spaces as ␣", isOn: $store.showSpaces)
-                .disabled(store.style == .bar)
-            Toggle("Show command list", isOn: $store.showList)
-            Divider()
-            HStack {
-                Text("Show").frame(width: 40, alignment: .leading)
-                Text("Trigger").frame(width: 90, alignment: .leading)
-                Text("Action")
-            }
-            .font(.caption).foregroundStyle(.secondary)
-            ForEach($store.defs) { $d in
-                HStack {
-                    Toggle("", isOn: $d.enabled).labelsHidden().frame(width: 40, alignment: .leading)
-                    TextField("", text: $d.trigger)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(width: 80)
-                        .disabled(!d.enabled)
-                        .padding(.trailing, 10)
-                    Text(Action(rawValue: d.id)?.help ?? d.id)
-                        .foregroundStyle(d.enabled ? .primary : .secondary)
-                    Spacer()
-                    if let p = store.problem(d) { Text(p).foregroundStyle(.red).font(.caption) }
+        Form {
+            Section("Activation") {
+                LabeledContent("Shortcut") {
+                    Text("⌥ Space").font(.system(.body, design: .monospaced))
                 }
             }
-            HStack {
-                Spacer()
-                Button("Reset to Defaults") { store.defs = CommandDef.defaults }
+            Section {
+                Picker("Style", selection: $store.style) {
+                    Text("Command bar").tag(Style.bar)
+                    Text("Minimal").tag(Style.minimal)
+                }
+                Toggle("Show command list", isOn: $store.showList)
+            } header: {
+                Text("Appearance")
+            } footer: {
+                Text("Minimal hides the text field and shows what you type as key caps.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Minimal style") {
+                Picker("Position", selection: $store.position) {
+                    ForEach(Position.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                Toggle("Show spaces as ␣", isOn: $store.showSpaces)
+            }
+            .disabled(store.style == .bar)
+        }
+        .formStyle(.grouped)
+    }
+}
+
+struct CommandSettings: View {
+    @ObservedObject var store = Store.shared
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach($store.defs) { $d in
+                    CommandRow(def: $d, problem: store.problem(d))
+                }
+            } footer: {
+                HStack(alignment: .top) {
+                    Text("The trigger is what you type. Switch a command off to hide it.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Reset to Defaults") { store.defs = CommandDef.defaults }
+                }
             }
         }
-        .padding(20)
-        .frame(width: 520)
+        .formStyle(.grouped)
+    }
+}
+
+struct CommandRow: View {
+    @Binding var def: CommandDef
+    let problem: String?
+
+    var body: some View {
+        let a = Action(rawValue: def.id)
+        HStack(spacing: 12) {
+            Image(systemName: a?.icon ?? "questionmark")
+                .font(.system(size: 15))
+                .frame(width: 22)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(a?.title ?? def.id)
+                    .foregroundStyle(def.enabled ? .primary : .secondary)
+                if let example = a?.example {
+                    Text(example.replacingOccurrences(of: "<trigger>", with: def.trigger.isEmpty ? "…" : def.trigger))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let problem {
+                    Text(problem).font(.caption).foregroundStyle(.red)
+                }
+            }
+            Spacer()
+            TextField("Trigger", text: $def.trigger)
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+                .multilineTextAlignment(.center)
+                .frame(width: 64)
+                .disabled(!def.enabled)
+            Toggle("Show \(a?.title ?? def.id)", isOn: $def.enabled)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+        }
     }
 }

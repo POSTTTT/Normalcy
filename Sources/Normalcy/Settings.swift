@@ -1,7 +1,9 @@
 import SwiftUI
 
 enum Action: String, CaseIterable {
-    case open, focus, desktop, move, tab, left, right, top, bottom, full, center, settings
+    case open, focus, desktop, move, tab, left, right, top, bottom, full, center
+    case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
+    case settings
 
     var defaultTrigger: String {
         switch self {
@@ -16,6 +18,13 @@ enum Action: String, CaseIterable {
         case .bottom: "j"
         case .full: "f"
         case .center: "c"
+        case .leftThird: "h3"
+        case .centerThird: "c3"
+        case .rightThird: "l3"
+        case .topLeft: "hk"
+        case .topRight: "lk"
+        case .bottomLeft: "hj"
+        case .bottomRight: "lj"
         case .settings: "set"
         }
     }
@@ -33,6 +42,13 @@ enum Action: String, CaseIterable {
         case .bottom: "Bottom Half"
         case .full: "Fill Screen"
         case .center: "Center"
+        case .leftThird: "Left Third"
+        case .centerThird: "Center Third"
+        case .rightThird: "Right Third"
+        case .topLeft: "Top Left Quarter"
+        case .topRight: "Top Right Quarter"
+        case .bottomLeft: "Bottom Left Quarter"
+        case .bottomRight: "Bottom Right Quarter"
         case .settings: "Settings"
         }
     }
@@ -50,6 +66,13 @@ enum Action: String, CaseIterable {
         case .bottom: "rectangle.bottomhalf.filled"
         case .full: "rectangle.fill"
         case .center: "rectangle.center.inset.filled"
+        case .leftThird: "rectangle.leadingthird.inset.filled"
+        case .centerThird: "rectangle.split.3x1"
+        case .rightThird: "rectangle.trailingthird.inset.filled"
+        case .topLeft: "rectangle.inset.topleft.filled"
+        case .topRight: "rectangle.inset.topright.filled"
+        case .bottomLeft: "rectangle.inset.bottomleft.filled"
+        case .bottomRight: "rectangle.inset.bottomright.filled"
         case .settings: "gearshape"
         }
     }

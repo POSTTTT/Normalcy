@@ -28,9 +28,28 @@ enum Command: Equatable {
         ["←": .left, "→": .right, "↑": .top, "↓": .bottom][s]
     }
 
-    // Enabled command for a typed word: its trigger, or an arrow symbol.
+    // Enabled command for a typed word: its trigger, an arrow symbol, or two directions
+    // in either order making a corner ("kh" = "hk" = ← ↑ = top-left quarter).
     static func lookup(_ word: String, in defs: [CommandDef]) -> CommandDef? {
-        defs.first { $0.enabled && ($0.trigger == word || arrowAction(word)?.rawValue == $0.id) }
+        if let d = defs.first(where: { $0.enabled && ($0.trigger == word || arrowAction(word)?.rawValue == $0.id) }) {
+            return d
+        }
+        guard word.count == 2 else { return nil }
+        let corners: [Set<Action>: Action] = [
+            [.left, .top]: .topLeft, [.right, .top]: .topRight, [.left, .bottom]: .bottomLeft, [.right, .bottom]: .bottomRight,
+        ]
+        let dirs = word.compactMap { direction(String($0), in: defs) }
+        guard dirs.count == 2, let corner = corners[Set(dirs)] else { return nil }
+        return defs.first { $0.enabled && $0.id == corner.rawValue }
+    }
+
+    // A single key meaning left/right/top/bottom: an arrow, or that command's current trigger.
+    static func direction(_ key: String, in defs: [CommandDef]) -> Action? {
+        let directions: [Action] = [.left, .right, .top, .bottom]
+        if let a = arrowAction(key) { return a }
+        return defs.first { $0.enabled && $0.trigger == key }
+            .flatMap { Action(rawValue: $0.id) }
+            .flatMap { directions.contains($0) ? $0 : nil }
     }
 
     static func desktopKey(_ arg: String) -> CGKeyCode? {
@@ -52,7 +71,9 @@ enum Command: Equatable {
         case .focus: return arg.isEmpty ? nil : .focus(arg)
         case .desktop: return desktopKey(arg).map { .ctrlKey($0) }
         case .move: return desktopKey(arg).map { .moveToDesktop($0) }
-        case .left, .right, .top, .bottom, .full, .center: return layoutRect(action).map { .layout($0) }
+        case .left, .right, .top, .bottom, .full, .center, .leftThird, .centerThird, .rightThird,
+             .topLeft, .topRight, .bottomLeft, .bottomRight:
+            return layoutRect(action).map { .layout($0) }
         case .tab:
             if arg.isEmpty { return .tabToWindow(nil) }
             // Argument is a window-layout trigger, e.g. "t h" = new window on the left half.
@@ -71,6 +92,13 @@ enum Command: Equatable {
         case .bottom: CGRect(x: 0, y: 0.5, width: 1, height: 0.5)
         case .full: CGRect(x: 0, y: 0, width: 1, height: 1)
         case .center: CGRect(x: 0.15, y: 0.1, width: 0.7, height: 0.8)
+        case .leftThird: CGRect(x: 0, y: 0, width: 1 / 3, height: 1)
+        case .centerThird: CGRect(x: 1 / 3, y: 0, width: 1 / 3, height: 1)
+        case .rightThird: CGRect(x: 2 / 3, y: 0, width: 1 / 3, height: 1)
+        case .topLeft: CGRect(x: 0, y: 0, width: 0.5, height: 0.5)
+        case .topRight: CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5)
+        case .bottomLeft: CGRect(x: 0, y: 0.5, width: 0.5, height: 0.5)
+        case .bottomRight: CGRect(x: 0.5, y: 0.5, width: 0.5, height: 0.5)
         default: nil
         }
     }
@@ -533,6 +561,33 @@ enum Main {
         precondition(q.layoutPreview == nil)
         q.text = "ha" // no exact match; selected row "Left Half" (title match) still previews
         precondition(q.layoutPreview == CGRect(x: 0, y: 0, width: 0.5, height: 1))
+        // Thirds and quarters, by trigger, by arrows, and after t.
+        precondition(Command.parse("h3", d) == .layout(CGRect(x: 0, y: 0, width: 1 / 3, height: 1)))
+        precondition(Command.parse("l3", d) == .layout(CGRect(x: 2 / 3, y: 0, width: 1 / 3, height: 1)))
+        precondition(Command.parse("hk", d) == .layout(CGRect(x: 0, y: 0, width: 0.5, height: 0.5)))
+        precondition(Command.parse("lj", d) == .layout(CGRect(x: 0.5, y: 0.5, width: 0.5, height: 0.5)))
+        precondition(Command.parse("←↑", d) == Command.parse("hk", d))
+        precondition(Command.parse("↑←", d) == Command.parse("hk", d))
+        precondition(Command.parse("→↓", d) == Command.parse("lj", d))
+        precondition(Command.parse("←←", d) == nil)
+        precondition(Command.parse("kh", d) == Command.parse("hk", d))
+        precondition(Command.parse("jl", d) == Command.parse("lj", d))
+        precondition(Command.parse("h↑", d) == Command.parse("hk", d))
+        precondition(Command.parse("hl", d) == nil) // left + right is no corner
+        precondition(Command.parse("t kh", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 0.5, height: 0.5)))
+        precondition(Command.parse("t c3", d) == .tabToWindow(CGRect(x: 1 / 3, y: 0, width: 1 / 3, height: 1)))
+        let t = Palette()
+        t.defs = { d }
+        t.text = "h"
+        precondition(t.matches.first?.id == "left") // "h" alone still means left half
+        t.typeArrow("←")
+        t.text = "←"
+        t.typeArrow("↑")
+        precondition(t.text == "←↑" && t.layoutPreview == CGRect(x: 0, y: 0, width: 0.5, height: 0.5))
+        t.text = "kh"
+        precondition(t.matches.first?.id == "topLeft")
+        // Every default trigger is unique.
+        precondition(Set(d.map(\.trigger)).count == d.count)
         print("selftest ok")
     }
 }

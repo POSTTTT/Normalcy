@@ -25,18 +25,21 @@ Press **Option+Space** to open the command bar. **Enter** runs the command; **Es
 | `d h` / `d l` | Go to the desktop on the left / right |
 | `m 2` / `m h` / `m l` | Move the current window to desktop 2 / left / right, and follow it |
 | `t` | Move the current tab into its own window |
-| `t h` | Move the current tab into its own window and put it on the left half (works with `h` `l` `k` `j` `f` `c`) |
+| `t h` | Move the current tab into its own window and put it on the left half (works with any window position) |
 | `h` / `l` | Move the window to the left / right half |
 | `k` / `j` | Move the window to the top / bottom half |
 | `f` | Make the window fill the screen |
 | `c` | Center the window |
+| `h3` / `c3` / `l3` | Move the window to the left / center / right third |
+| `hk` / `lk` | Move the window to the top-left / top-right quarter |
+| `hj` / `lj` | Move the window to the bottom-left / bottom-right quarter |
 | `set` | Open Settings |
 
 These are the default triggers. Change them in Settings.
 
 ### Keys in the command bar
 
-- **Arrow keys** work like `h` `j` `k` `l`: ← is left, ↓ bottom, ↑ top, → right. After `t`, `d` or `m` they add the space for you, so `t` then ← becomes `t ←`. They keep working even if you rename those triggers.
+- **Arrow keys** work like `h` `j` `k` `l`: ← is left, ↓ bottom, ↑ top, → right. Two arrows make a corner quarter, in either order: ← ↑ is top-left. After `t`, `d` or `m` they add the space for you, so `t` then ← becomes `t ←`. They keep working even if you rename those triggers.
 - **Tab** / **Shift+Tab** or **Ctrl+N** / **Ctrl+P** move the highlight in the command list.
 - **Enter** on a highlighted command that needs more (like `o`) fills in its trigger so you can keep typing; other commands run straight away.
 

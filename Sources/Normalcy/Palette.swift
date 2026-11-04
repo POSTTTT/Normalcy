@@ -49,10 +49,10 @@ final class Palette: ObservableObject {
         let s = text.drop { $0 == " " }
         guard let head = s.split(separator: " ").first.map(String.init) else { return defs }
         if s.contains(" ") { return defs.filter { $0.trigger == head } }
-        let exact = defs.filter { $0.trigger == head || Command.arrowAction(head)?.rawValue == $0.id }
-        let prefix = defs.filter { $0.trigger != head && $0.trigger.hasPrefix(head) }
+        let exact = Command.lookup(head, in: defs).map { [$0] } ?? []
+        let prefix = defs.filter { $0.trigger != head && $0.trigger.hasPrefix(head) && !exact.contains($0) }
         let title = defs.filter {
-            !$0.trigger.hasPrefix(head) && (Action(rawValue: $0.id)?.title ?? "").localizedCaseInsensitiveContains(head)
+            !$0.trigger.hasPrefix(head) && !exact.contains($0) && (Action(rawValue: $0.id)?.title ?? "").localizedCaseInsensitiveContains(head)
         }
         return exact + prefix + title
     }

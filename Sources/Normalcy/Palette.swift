@@ -4,6 +4,7 @@ final class Palette: ObservableObject {
     @Published var text = "" { didSet { selected = 0 } }
     @Published var selected = 0
     @Published var focusToken = 0 // bumped on every show to refocus the field
+    @Published var visible = false // drives the entrance; reset while hidden so each open animates
     var submit: (String) -> Void = { _ in }
     var cancel: () -> Void = {}
     var defs: () -> [CommandDef] = { Store.shared.defs }
@@ -146,6 +147,9 @@ struct PaletteView: View {
             }
             // Desktop thumbnails fade in when a desktop command is typed.
             .animation(motion(0.18) ?? .linear(duration: 0.1), value: model.desktopCommand?.id)
+            // Entrance: grows from the edge it's anchored to; Reduce Motion keeps only the fade.
+            .opacity(model.visible ? 1 : 0)
+            .scaleEffect(model.visible || reduceMotion ? 1 : 0.97, anchor: alignment.unitPoint)
             .padding(20) // room for the shadow
             .padding(.top, position == .top ? g.size.height * 0.15 : 0)
             .padding(.bottom, position == .bottom ? g.size.height * 0.08 : 0)
@@ -306,6 +310,16 @@ struct LayoutPreview: View {
         }
         // Switching h to l slides the box across (spatial: shows where the window goes).
         .animation(reduceMotion ? .linear(duration: 0.1) : .spring(duration: 0.25, bounce: 0), value: model.layoutPreview)
+    }
+}
+
+extension Alignment {
+    var unitPoint: UnitPoint {
+        switch self {
+        case .top: .top
+        case .bottom: .bottom
+        default: .center
+        }
     }
 }
 

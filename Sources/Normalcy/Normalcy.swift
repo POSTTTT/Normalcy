@@ -251,12 +251,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         preview.orderFront(nil) // first, so the bar stays above it
         panel.makeKeyAndOrderFront(nil)
-        DispatchQueue.main.async { self.palette.focusToken += 1 }
+        DispatchQueue.main.async {
+            self.palette.focusToken += 1
+            withAnimation(.uiEaseOut(0.15)) { self.palette.visible = true }
+        }
     }
 
+    // Closing stays instant: a fading bar would get caught in a desktop switch.
     func hide() {
         panel.orderOut(nil)
         preview.orderOut(nil)
+        palette.visible = false
     }
 
     func windowDidResignKey(_ n: Notification) { hide() }

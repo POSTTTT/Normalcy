@@ -340,6 +340,17 @@ struct CommandSettings: View {
     @ObservedObject var store = Store.shared
     // Direction keys in left, down, up, right order.
     let presets = [("hjkl", "H J K L"), ("aswd", "W A S D"), ("jkil", "I J K L")]
+    // Fixed keys, listed so they can be found. Keep in sync with PaletteView.field's key handling.
+    let barKeys = [
+        ("Enter", "Run the command"),
+        ("⇧ Enter", "Run it and keep the bar open"),
+        ("Tab  ⇧ Tab", "Move through the list"),
+        ("⌃N  ⌃P", "Move through the list"),
+        ("← ↓ ↑ →", "Same as the direction keys"),
+        ("Esc", "Clear what you typed; close when empty"),
+        ("⌃U", "Clear what you typed"),
+        ("⌃W", "Delete the last word"),
+    ]
 
     var body: some View {
         let currentKeys = Action.directions.map { a in store.defs.first { $0.id == a.rawValue }?.trigger ?? "" }.joined()
@@ -348,6 +359,13 @@ struct CommandSettings: View {
         })
         let groups = Action.allCases.map(\.group).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
         Form {
+            Section("Keys in the Bar") {
+                ForEach(barKeys, id: \.0) { keys, what in
+                    LabeledContent(what) {
+                        Text(keys).font(.system(.body, design: .monospaced)).foregroundStyle(.secondary)
+                    }
+                }
+            }
             Section("Direction Keys") {
                 Picker("Preset", selection: presetBinding) {
                     ForEach(presets, id: \.0) { Text($0.1).tag($0.0) }
@@ -384,7 +402,7 @@ struct CommandSettings: View {
             }
             Section {} footer: {
                 HStack(alignment: .top) {
-                    Text("The trigger is what you type. Switch a command off to hide it. Shift+Enter runs a command and keeps the bar open for the next. Esc or Ctrl+U clears what you typed, Ctrl+W the last word. Tab or Ctrl+N / Ctrl+P move through the list.")
+                    Text("The trigger is what you type. Switch a command off to hide it.")
                         .font(.caption).foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)

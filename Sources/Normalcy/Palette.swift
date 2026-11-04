@@ -213,13 +213,7 @@ struct PaletteView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.97)))
         }
         if store.showList, !rows.isEmpty {
-            VStack(spacing: 2) {
-                ForEach(Array(rows.enumerated()), id: \.element.id) { i, d in
-                    row(d, selected: i == model.selected)
-                        .onTapGesture { model.selected = i; model.enter() }
-                        .transition(.opacity)
-                }
-            }
+            list(rows)
             .padding(8)
             .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
             // Filtering: rows fade and the panel resizes instead of jumping.
@@ -290,7 +284,92 @@ struct PaletteView: View {
         }
     }
 
-    func row(_ d: CommandDef, selected: Bool) -> some View {
+    // The list in the layout picked in Settings. Every layout keeps the order of `matches`,
+    // so Tab / Ctrl+N walk it the way it reads.
+    @ViewBuilder func list(_ rows: [CommandDef]) -> some View {
+        let items = Array(rows.enumerated())
+        switch store.listStyle {
+        case .grid:
+            // Runs of window commands become tile grids; everything else stays a row.
+            let runs = items.reduce(into: [[(offset: Int, element: CommandDef)]]()) { runs, item in
+                let tile = Action(rawValue: item.element.id)?.isWindow == true
+                if let last = runs.last?.last, (Action(rawValue: last.element.id)?.isWindow == true) == tile {
+                    runs[runs.count - 1].append(item)
+                } else { runs.append([item]) }
+            }
+            VStack(spacing: 2) {
+                ForEach(runs, id: \.first!.element.id) { run in
+                    if Action(rawValue: run[0].element.id)?.isWindow == true {
+                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(60), spacing: 6), count: 8), spacing: 6) {
+                            ForEach(run, id: \.element.id) { i, d in tile(i, d) }
+                        }
+                        .padding(.vertical, 6)
+                        // Tiles have no titles; name the highlighted one.
+                        if let sel = run.first(where: { $0.offset == model.selected }) {
+                            Text(Action(rawValue: sel.element.id)?.title ?? "")
+                                .font(.system(size: 12)).foregroundStyle(.secondary)
+                                .padding(.bottom, 4)
+                        }
+                    } else {
+                        ForEach(run, id: \.element.id) { i, d in tappableRow(i, d, height: 40) }
+                    }
+                }
+            }
+        case .grouped:
+            // Section headers where the group changes; capped height, scrolls to the highlight.
+            let headerAt = Set(items.filter { i, d in
+                i == 0 || Action(rawValue: rows[i - 1].id)?.group != Action(rawValue: d.id)?.group
+            }.map(\.offset))
+            ScrollViewReader { scroll in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(items, id: \.element.id) { i, d in
+                            if headerAt.contains(i) {
+                                Text((Action(rawValue: d.id)?.group ?? "").uppercased())
+                                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                                    .padding(.horizontal, 16).padding(.top, i == 0 ? 4 : 10).padding(.bottom, 4)
+                            }
+                            tappableRow(i, d, height: 34).id(d.id)
+                        }
+                    }
+                }
+                .scrollIndicators(.never)
+                .frame(height: min(CGFloat(items.count) * 34 + CGFloat(headerAt.count) * 28, 440))
+                .onChange(of: model.selected) {
+                    if rows.indices.contains(model.selected) { scroll.scrollTo(rows[model.selected].id) }
+                }
+            }
+        }
+    }
+
+    func tappableRow(_ i: Int, _ d: CommandDef, height: CGFloat) -> some View {
+        row(d, selected: i == model.selected, height: height)
+            .onTapGesture { model.selected = i; model.enter() }
+            .transition(.opacity)
+    }
+
+    // Grid style: icon with the trigger under it; the full name shows below the grid when highlighted.
+    func tile(_ i: Int, _ d: CommandDef) -> some View {
+        let a = Action(rawValue: d.id)
+        return VStack(spacing: 5) {
+            Image(systemName: a?.icon ?? "questionmark").font(.system(size: 18))
+            Text(d.trigger).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
+        }
+        .frame(width: 60, height: 56)
+        .background {
+            if i == model.selected {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.primary.opacity(0.1))
+                    .matchedGeometryEffect(id: "selection", in: selection)
+            }
+        }
+        .contentShape(Rectangle())
+        .help(a?.title ?? d.id)
+        .onTapGesture { model.selected = i; model.enter() }
+        .transition(.opacity)
+    }
+
+    func row(_ d: CommandDef, selected: Bool, height: CGFloat = 40) -> some View {
         let a = Action(rawValue: d.id)
         return HStack(spacing: 16) {
             Image(systemName: a?.icon ?? "questionmark")
@@ -303,7 +382,7 @@ struct PaletteView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16)
-        .frame(height: 40)
+        .frame(height: height)
         .background {
             // One highlight that slides between rows, so the eye follows the selection.
             if selected {

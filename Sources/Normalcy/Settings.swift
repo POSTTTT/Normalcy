@@ -91,6 +91,9 @@ enum Action: String, CaseIterable {
         }
     }
 
+    // Window placement and sizing: shown as tiles in the grid list.
+    var isWindow: Bool { ["Halves", "Thirds", "Quarters", "Fill & Center", "Resize"].contains(group) }
+
     // Section the command is listed under in Settings.
     var group: String {
         switch self {
@@ -208,6 +211,8 @@ struct ResizeSteps {
 }
 
 enum Style: String, CaseIterable { case bar, minimal }
+// How the command list is laid out.
+enum ListStyle: String, CaseIterable { case grid, grouped }
 enum Position: String, CaseIterable { case top, center, bottom }
 
 final class Store: ObservableObject {
@@ -216,6 +221,9 @@ final class Store: ObservableObject {
 
     @Published var style = Style(rawValue: UserDefaults.standard.string(forKey: "style") ?? "") ?? .bar {
         didSet { UserDefaults.standard.set(style.rawValue, forKey: "style") }
+    }
+    @Published var listStyle = ListStyle(rawValue: UserDefaults.standard.string(forKey: "listStyle") ?? "") ?? .grid {
+        didSet { UserDefaults.standard.set(listStyle.rawValue, forKey: "listStyle") }
     }
     @Published var showList = UserDefaults.standard.object(forKey: "showList") as? Bool ?? true {
         didSet { UserDefaults.standard.set(showList, forKey: "showList") }
@@ -291,6 +299,11 @@ struct GeneralSettings: View {
                     Text("Minimal").tag(Style.minimal)
                 }
                 Toggle("Show command list", isOn: $store.showList)
+                Picker("List layout", selection: $store.listStyle) {
+                    Text("Rows + layout grid").tag(ListStyle.grid)
+                    Text("Grouped, scrolling").tag(ListStyle.grouped)
+                }
+                .disabled(!store.showList)
             } header: {
                 Text("Appearance")
             } footer: {

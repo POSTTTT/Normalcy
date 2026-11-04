@@ -8,6 +8,8 @@ final class Palette: ObservableObject {
     var cancel: () -> Void = {}
     var defs: () -> [CommandDef] = { Store.shared.defs }
     @Published var desktops = Desktops()
+    @Published var thumbs: [Int: NSImage] = [:] // space ID -> last snapshot
+    @Published var wallpaper: NSImage? // stand-in for desktops not yet snapshotted
 
     // The desktop-related command being typed or highlighted, if any.
     var desktopCommand: CommandDef? {
@@ -93,29 +95,44 @@ struct PaletteView: View {
         .onChange(of: model.focusToken) { focused = true }
     }
 
-    // Numbered tiles: current desktop outlined, typed target filled. Click a tile to go/move there.
+    // Mission Control-style thumbnails: target gets the accent border, current a faint one.
+    // Click a thumbnail to go/move there.
     func desktopStrip(_ cmd: CommandDef) -> some View {
         let d = model.desktops
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        return VStack(alignment: .leading, spacing: 10) {
-            Text(d.current.map { "Desktop \($0) of \(d.count)" } ?? "\(d.count) desktops · full-screen app")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 48), spacing: 8)], spacing: 8) {
-                ForEach(1...d.count, id: \.self) { n in
-                    Text("\(n)")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .frame(maxWidth: .infinity, minHeight: 36)
-                        .background(n == model.desktopTarget ? Color.accentColor.opacity(0.7)
-                                                             : Color.primary.opacity(0.08), in: shape)
-                        .overlay(shape.strokeBorder(Color.primary.opacity(n == d.current ? 0.7 : 0), lineWidth: 1.5))
-                        .contentShape(shape)
-                        .onTapGesture { model.submit("\(cmd.trigger) \(n)") }
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        return HStack(alignment: .top, spacing: 14) {
+            ForEach(Array(d.ids.enumerated()), id: \.element) { i, id in
+                let n = i + 1
+                let isTarget = n == model.desktopTarget
+                VStack(spacing: 6) {
+                    Color.clear
+                        .aspectRatio(16 / 10, contentMode: .fit)
+                        .overlay { thumbnail(id) }
+                        .clipShape(shape)
+                        .overlay(shape.strokeBorder(isTarget ? Color.accentColor : Color.white.opacity(n == d.current ? 0.6 : 0.15),
+                                                    lineWidth: isTarget ? 3 : 1))
+                    Text("Desktop \(n)")
+                        .font(.system(size: 12, weight: n == d.current ? .semibold : .regular))
+                        .foregroundStyle(n == d.current ? .primary : .secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                 }
+                .frame(maxWidth: 160)
+                .contentShape(Rectangle())
+                .onTapGesture { model.submit("\(cmd.trigger) \(n)") }
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(14)
         .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    @ViewBuilder func thumbnail(_ id: Int) -> some View {
+        if let img = model.thumbs[id] ?? model.wallpaper {
+            Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
+        } else {
+            Color.primary.opacity(0.08)
+        }
     }
 
     func row(_ d: CommandDef, selected: Bool) -> some View {

@@ -73,6 +73,31 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         buildPanel()
         registerHotKey()
         buildStatusItem()
+        CGRequestScreenCaptureAccess() // for desktop thumbnails
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            // Let the switch animation finish before capturing.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self?.snapshotDesktop() }
+        }
+        snapshotDesktop()
+    }
+
+    func snapshotDesktop() {
+        guard let id = Desktops.read().currentID else { return }
+        Task { @MainActor in
+            if let img = await Snapshot.capture() { palette.thumbs[id] = img }
+        }
+    }
+
+    var wallpaperKey: String?
+    func loadWallpaper() {
+        let url = NSScreen.main.flatMap { NSWorkspace.shared.desktopImageURL(for: $0) }
+        let dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let key = "\(url?.path ?? "")|\(dark)" // reload when the wallpaper or appearance changes
+        guard key != wallpaperKey else { return }
+        wallpaperKey = key
+        palette.wallpaper = url.flatMap { Wallpaper.load($0, dark: dark) }
     }
 
     func buildStatusItem() {
@@ -124,6 +149,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         target = NSWorkspace.shared.frontmostApplication
         palette.text = ""
         palette.desktops = Desktops.read()
+        loadWallpaper()
+        snapshotDesktop()
         if let s = NSScreen.main?.frame {
             panel.setFrameOrigin(NSPoint(x: s.midX - panel.frame.width / 2,
                                          y: s.maxY - s.height * 0.2 - panel.frame.height))
@@ -145,7 +172,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 $0.activationPolicy == .regular && ($0.localizedName ?? "").lowercased().hasPrefix(q.lowercased())
             }?.activate()
         case .ctrlKey(let key):
-            pressCtrl(key)
+            desktopKeys(key).forEach { pressCtrl($0) }
         case .moveToDesktop(let key):
             moveWindow(toDesktop: key)
         case .layout(let f):
@@ -173,17 +200,35 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return true
     }
 
+    // Ctrl+N only works when "Switch to Desktop N" is turned on (off by default).
+    // When it's off, step there with Ctrl+Left/Right from the current desktop instead.
+    func desktopKeys(_ key: CGKeyCode) -> [CGKeyCode] {
+        guard let i = Command.digitKeys.firstIndex(of: key), !Self.shortcutEnabled(118 + i),
+              let cur = Desktops.read().current else { return [key] }
+        let n = i + 1
+        return Array(repeating: n > cur ? 124 : 123, count: abs(n - cur))
+    }
+
+    // Mission Control shortcut IDs: 118 = Switch to Desktop 1, 119 = Desktop 2, ...
+    static func shortcutEnabled(_ id: Int) -> Bool {
+        let all = UserDefaults(suiteName: "com.apple.symbolichotkeys")?.dictionary(forKey: "AppleSymbolicHotKeys")
+        return (all?["\(id)"] as? [String: Any])?["enabled"] as? Bool ?? false
+    }
+
     // No public API moves a window between spaces. Instead: hold the mouse down on the
     // title bar, switch desktop, release — macOS carries a dragged window along.
     func moveWindow(toDesktop key: CGKeyCode) {
-        guard AXIsProcessTrusted(), let w = focusedWindow(), let grab = titleBarPoint(w) else { NSSound.beep(); return }
+        let keys = desktopKeys(key)
+        guard AXIsProcessTrusted(), !keys.isEmpty, let w = focusedWindow(), let grab = titleBarPoint(w) else {
+            NSSound.beep(); return
+        }
         let restore = CGEvent(source: nil)?.location ?? grab
         postMouse(.mouseMoved, grab)
         postMouse(.leftMouseDown, grab)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.pressCtrl(key)
-            // Wait for the space-switch animation before letting go.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            keys.forEach { self.pressCtrl($0) }
+            // Wait for the space-switch animation(s) before letting go.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5 + 0.3 * Double(keys.count - 1)) {
                 self.postMouse(.leftMouseUp, grab)
                 CGWarpMouseCursorPosition(restore)
             }
@@ -300,9 +345,9 @@ enum Main {
             "Current Space": ["ManagedSpaceID": 7],
             "Spaces": [["ManagedSpaceID": 3, "type": 0], ["ManagedSpaceID": 9, "type": 4], ["ManagedSpaceID": 7, "type": 0]],
         ]]
-        precondition(Desktops.parse(fake) == Desktops(count: 2, current: 2))
+        precondition(Desktops.parse(fake) == Desktops(ids: [3, 7], currentID: 7) && Desktops.parse(fake).current == 2)
         precondition(Desktops.parse([]) == Desktops())
-        p.desktops = Desktops(count: 4, current: 2)
+        p.desktops = Desktops(ids: [10, 20, 30, 40], currentID: 20)
         p.text = "d"
         precondition(p.desktopCommand?.id == "desktop" && p.desktopTarget == nil)
         p.text = "m h"

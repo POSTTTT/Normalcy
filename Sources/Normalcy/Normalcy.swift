@@ -184,6 +184,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         preview.backgroundColor = .clear
         preview.hasShadow = false
         preview.ignoresMouseEvents = true
+        // Panels fade out by default. A fading bar gets caught in the desktop-switch animation
+        // and reappears on the new desktop, so hide both instantly.
+        panel.animationBehavior = .none
+        preview.animationBehavior = .none
         preview.level = .floating
         preview.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
@@ -238,7 +242,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 $0.activationPolicy == .regular && ($0.localizedName ?? "").lowercased().hasPrefix(q.lowercased())
             }?.activate()
         case .ctrlKey(let key):
-            desktopKeys(key).forEach { pressCtrl($0) }
+            // Let the window server drop the hidden bar before the desktop slides.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.desktopKeys(key).forEach { self.pressCtrl($0) }
+            }
         case .moveToDesktop(let key):
             moveWindow(toDesktop: key)
         case .layout(let f):

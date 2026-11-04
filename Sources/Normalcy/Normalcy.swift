@@ -13,6 +13,7 @@ import SwiftUI
 //   f c            window: full / center
 //   + -            window: 10% bigger / smaller, staying centered
 //   re <h|l|k|j>…  window: narrower / wider / shorter / taller, one step per key
+//   s <j|k|h|l>…   scroll the window down / up / left / right as each key is pressed
 //   set            open settings
 enum Command: Equatable {
     case open(String)
@@ -23,6 +24,7 @@ enum Command: Equatable {
     case layout(CGRect) // fractions of the screen, top-left origin
     case resize(Int) // steps bigger (or smaller, if negative) around the window's center
     case resizeEdge(CGSize) // steps to move the right and bottom edges out (or in, if negative)
+    case scroll(CGSize) // steps right and down (negative: left and up)
     case settings
 
     static let digitKeys: [CGKeyCode] = [18, 19, 20, 21, 23, 22, 26, 28, 25] // kVK_ANSI_1...9
@@ -100,15 +102,20 @@ enum Command: Equatable {
             return .tabToWindow(rect)
         case .grow: return .resize(1)
         case .shrink: return .resize(-1)
-        case .resize:
-            // Each direction key is one step: "re ll" = two steps wider.
-            let steps: [Action: CGSize] = [.right: CGSize(width: 1, height: 0), .left: CGSize(width: -1, height: 0),
-                                           .bottom: CGSize(width: 0, height: 1), .top: CGSize(width: 0, height: -1)]
-            let moves = arg.map { steps[direction(String($0), in: defs) ?? .full] }
-            guard !moves.isEmpty, !moves.contains(nil) else { return nil }
-            return .resizeEdge(moves.compactMap { $0 }.reduce(.zero) { CGSize(width: $0.width + $1.width, height: $0.height + $1.height) })
+        case .resize: return directionSteps(arg, defs).map { .resizeEdge($0) }
+        case .scroll: return directionSteps(arg, defs).map { .scroll($0) }
         case .settings: return .settings
         }
+    }
+
+    // Each direction key is one step, summed: "ll" = two right, "lj" = one right and one down.
+    // nil if empty or anything but a direction is typed.
+    static func directionSteps(_ arg: String, _ defs: [CommandDef]) -> CGSize? {
+        let steps: [Action: CGSize] = [.right: CGSize(width: 1, height: 0), .left: CGSize(width: -1, height: 0),
+                                       .bottom: CGSize(width: 0, height: 1), .top: CGSize(width: 0, height: -1)]
+        let moves = arg.map { direction(String($0), in: defs).flatMap { steps[$0] } }
+        guard !moves.isEmpty, !moves.contains(nil) else { return nil }
+        return moves.compactMap { $0 }.reduce(.zero) { CGSize(width: $0.width + $1.width, height: $0.height + $1.height) }
     }
 
     static func layoutRect(_ a: Action) -> CGRect? {
@@ -259,8 +266,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         palette.submitContinuing = { [weak self] text in
             guard let self, let cmd = Command.parse(text, Store.shared.defs) else { return NSSound.beep() }
-            // Resizing by direction is done in small steps, so keep "re " ready for the next one.
-            let again = if case .resizeEdge = cmd { (text.split(separator: " ").first.map(String.init) ?? "") + " " } else { "" }
+            // Resizing by direction and scrolling go in small steps, so keep "re " / "s " ready.
+            let stepping = switch cmd { case .resizeEdge, .scroll: true; default: false }
+            let again = stepping ? (text.split(separator: " ").first.map(String.init) ?? "") + " " : ""
             // The bar stays up. Commands that activate an app take focus from it, so it
             // ignores losing focus until it takes it back once the command has landed.
             continuing = true
@@ -275,6 +283,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.refocus() }
         }
         palette.cancel = { [weak self] in self?.hide() }
+        palette.live = { [weak self] in self?.run($0) }
         panel.contentView = NSHostingView(rootView: PaletteView(model: palette))
         preview.contentView = NSHostingView(rootView: LayoutPreview(model: palette))
         preview.isOpaque = false
@@ -381,6 +390,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             place(f)
         case .resize, .resizeEdge:
             resizeFocused(cmd)
+        case .scroll(let steps):
+            scroll(steps)
         case .tabToWindow(let layout):
             // The bar took key focus from the app's window. Hand it back first, or Safari
             // applies the command to a different tab than the one showing.
@@ -532,6 +543,48 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let target = CGRect(x: bounds.minX + v.width * f.minX, y: bounds.minY + v.height * f.minY,
                             width: v.width * f.width, height: v.height * f.height)
         setFrame(w, target, bounds: bounds)
+    }
+
+    // Scrolls the target window a quarter of its height (or width) per step, aimed at the
+    // window's center; the pointer doesn't move. Apps ignore scrolls posted to them directly,
+    // so it goes through the system, and the bar lets it pass in case it sits over that spot.
+    // The distance is spread over a few frames, easing out, so it glides instead of jumping;
+    // steps pressed while it's still moving add to what's left.
+    var scrollLeft = CGSize.zero // pixels still to scroll: positive is up / left, as wheel values
+    var scrollAt = CGPoint.zero
+    var scrollTimer: Timer?
+
+    func scroll(_ steps: CGSize) {
+        guard let w = focusedWindow(), let f = axFrame(w) else { return }
+        scrollLeft.width -= steps.width * f.width / 4
+        scrollLeft.height -= steps.height * f.height / 4
+        scrollAt = CGPoint(x: f.midX, y: f.midY)
+        guard scrollTimer == nil else { return }
+        panel.ignoresMouseEvents = true
+        scrollTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { [weak self] t in
+            guard let self else { return t.invalidate() }
+            // A quarter of what's left each frame: fast at first, settling in about a quarter second.
+            let dx = Self.scrollPart(scrollLeft.width), dy = Self.scrollPart(scrollLeft.height)
+            if dx == 0 && dy == 0 {
+                t.invalidate()
+                scrollTimer = nil
+                scrollLeft = .zero
+                panel.ignoresMouseEvents = false
+                return
+            }
+            scrollLeft.width -= CGFloat(dx)
+            scrollLeft.height -= CGFloat(dy)
+            let e = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: dy, wheel2: dx, wheel3: 0)
+            e?.location = scrollAt
+            e?.post(tap: .cghidEventTap)
+        }
+    }
+
+    // Whole pixels to scroll this frame: a quarter of what's left, at least 1, 0 when done.
+    static func scrollPart(_ left: CGFloat) -> Int32 {
+        guard abs(left) >= 1 else { return 0 }
+        let part = (left / 4).rounded()
+        return Int32(part == 0 ? (left > 0 ? 1 : -1) : part)
     }
 
     // Visible area of the bar's screen, in AX coordinates (top-left origin of the primary screen).
@@ -795,6 +848,22 @@ enum Main {
                                  bounds: unit, steps: steps)!.width == 600)
         precondition(Command.parse("re x", d) == nil && Command.parse("re", d) == nil)
         precondition(Command.parse("t +", d) == nil)
+        precondition(Command.parse("s j", d) == .scroll(CGSize(width: 0, height: 1)))
+        precondition(Command.parse("s kk", d) == .scroll(CGSize(width: 0, height: -2)))
+        precondition(Command.parse("s ↓", d) == .scroll(CGSize(width: 0, height: 1)) && Command.parse("s", d) == nil)
+        // Scrolling runs as each key is typed, without Enter, and leaves "s " ready.
+        let sp = Palette()
+        sp.defs = { d }
+        var scrolled: [Command] = []
+        sp.live = { scrolled.append($0) }
+        sp.text = "s "
+        precondition(sp.scrollKey("j") && scrolled == [.scroll(CGSize(width: 0, height: 1))])
+        precondition(sp.scrollKey("k") && scrolled.last == .scroll(CGSize(width: 0, height: -1)))
+        sp.typeArrow("↑")
+        precondition(scrolled.last == .scroll(CGSize(width: 0, height: -1)) && scrolled.count == 3 && sp.text == "s ")
+        precondition(!sp.scrollKey("x")) // other keys type as usual
+        sp.text = "o "
+        precondition(!sp.scrollKey("j")) // only after the scroll command
         // Resizes preview where the window will go.
         let rp = Palette()
         rp.defs = { d }
@@ -810,6 +879,10 @@ enum Main {
         precondition(App.center(CGSize(width: 400, height: 300), in: screen, bounds: screen) == CGPoint(x: 300, y: 275))
         precondition(App.center(CGSize(width: 400, height: 300), in: CGRect(x: 0, y: 25, width: 500, height: 800), bounds: screen) == CGPoint(x: 50, y: 275))
         precondition(App.center(CGSize(width: 600, height: 900), in: CGRect(x: 500, y: 25, width: 500, height: 800), bounds: screen) == CGPoint(x: 400, y: 25))
+        // Smooth scroll frames add up to the whole distance and stop.
+        var left: CGFloat = -263, frames = 0
+        while App.scrollPart(left) != 0 { left -= CGFloat(App.scrollPart(left)); frames += 1 }
+        precondition(abs(left) < 1 && frames < 40)
         // Discarding input: Ctrl+W drops a word, Esc clears before it closes.
         let e = Palette()
         var closed = false

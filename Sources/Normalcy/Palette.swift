@@ -2,6 +2,7 @@ import SwiftUI
 
 final class Palette: ObservableObject {
     @Published var text = "" { didSet { selected = 0 } }
+    var live: (Command) -> Void = { _ in } // runs a command right away, bar staying open
     @Published var selected = 0
     @Published var focusToken = 0 // bumped on every show to refocus the field
     @Published var visible = false // drives the entrance; reset while hidden so each open animates
@@ -93,9 +94,21 @@ final class Palette: ObservableObject {
         return Action(rawValue: d.id)?.argName
     }
 
+    // Scroll mode: once "s " is typed, a direction key scrolls right away and is never typed,
+    // so the bar stays on "s ". Returns false when the key should be typed as usual.
+    func scrollKey(_ key: String) -> Bool {
+        let words = text.split(separator: " ")
+        guard words.count == 1, text.hasSuffix(" "),
+              Command.lookup(String(words[0]), in: defs())?.id == Action.scroll.rawValue,
+              let steps = Command.directionSteps(key, defs()) else { return false }
+        live(.scroll(steps))
+        return true
+    }
+
     // Arrow keys type ← ↓ ↑ →, which work like h j k l. Right after a command that takes a
     // direction (t, d, m) they add the space too, so "t" + ← becomes "t ←".
     func typeArrow(_ letter: String) {
+        if scrollKey(letter) { return }
         let head = text.trimmingCharacters(in: .whitespaces)
         let takesArg = defs().contains {
             $0.enabled && $0.trigger == head && Action(rawValue: $0.id)?.argHint != nil
@@ -198,7 +211,8 @@ struct PaletteView: View {
             .font(.system(size: 22))
             .focused($focused)
             .onSubmit { model.enter() }
-            .onKeyPress(phases: .down) { press in
+            // Repeats too, so holding a key keeps scrolling or moving through the list.
+            .onKeyPress(phases: [.down, .repeat]) { press in
                 switch press.key {
                 case .leftArrow: model.typeArrow("←")
                 case .downArrow: model.typeArrow("↓")
@@ -211,6 +225,7 @@ struct PaletteView: View {
                 case "p" where press.modifiers.contains(.control): model.move(-1)
                 case .return where press.modifiers.contains(.shift): model.enter(continuing: true)
                 case .escape: model.escape()
+                case _ where press.modifiers.isEmpty && model.scrollKey(press.characters): break
                 case "u" where press.modifiers.contains(.control): model.text = "" // discard, like a shell
                 case "w" where press.modifiers.contains(.control): model.deleteWord()
                 default: return .ignored

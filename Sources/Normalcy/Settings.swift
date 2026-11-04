@@ -5,6 +5,7 @@ enum Action: String, CaseIterable {
     case open, focus, desktop, move, tab, left, right, top, bottom, full, center
     case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
     case grow, shrink, resize
+    case scroll
     case settings
 
     // Left, down, up, right: the direction keys are these commands' triggers.
@@ -33,6 +34,7 @@ enum Action: String, CaseIterable {
         case .grow: "+"
         case .shrink: "-"
         case .resize: "re"
+        case .scroll: "s"
         case .settings: "set"
         }
     }
@@ -60,6 +62,7 @@ enum Action: String, CaseIterable {
         case .grow: "Make Bigger"
         case .shrink: "Make Smaller"
         case .resize: "Resize by Direction"
+        case .scroll: "Scroll"
         case .settings: "Settings"
         }
     }
@@ -87,6 +90,7 @@ enum Action: String, CaseIterable {
         case .grow: "arrow.up.left.and.arrow.down.right"
         case .shrink: "arrow.down.right.and.arrow.up.left"
         case .resize: "arrow.up.and.down.and.arrow.left.and.right"
+        case .scroll: "scroll"
         case .settings: "gearshape"
         }
     }
@@ -104,6 +108,7 @@ enum Action: String, CaseIterable {
         case .topLeft, .topRight, .bottomLeft, .bottomRight: "Quarters"
         case .full, .center: "Fill & Center"
         case .grow, .shrink, .resize: "Resize"
+        case .scroll: "Scroll"
         case .settings: "Other"
         }
     }
@@ -115,6 +120,7 @@ enum Action: String, CaseIterable {
         case .desktop, .move: "1-9 <left> <right>"
         case .tab: "<left> <right> <up> <down> f c"
         case .resize: "<left> <right> <up> <down>"
+        case .scroll: "<down> <up> <left> <right>"
         default: nil
         }
     }
@@ -125,7 +131,7 @@ enum Action: String, CaseIterable {
         case .open, .focus: "app"
         case .desktop, .move: "number or direction"
         case .tab: "position"
-        case .resize: "direction"
+        case .resize, .scroll: "direction"
         default: nil
         }
     }
@@ -140,6 +146,7 @@ enum Action: String, CaseIterable {
         case .focus: "<trigger> saf — matches the start of the app name"
         case .desktop, .move: "<trigger> 2, or <trigger> <left> / <trigger> <right> for left / right"
         case .tab: "<trigger>, or <trigger> <left> to put the new window on the left"
+        case .scroll: "<trigger>, then <down> <up> <left> <right> scroll as you press them; Esc to stop"
         case .resize: "<trigger> <right> wider, <trigger> <left> narrower, <trigger> <down> taller, <trigger> <up> shorter"
         default: nil
         }

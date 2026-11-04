@@ -12,6 +12,9 @@ final class Palette: ObservableObject {
     @Published var desktops = Desktops()
     @Published var thumbs: [Int: NSImage] = [:] // space ID -> last snapshot
     @Published var wallpaper: NSImage? // stand-in for desktops not yet snapshotted
+    var window: CGRect? // target window and screen, AX coordinates, captured when the bar opens
+    var screen: CGRect?
+    var steps: () -> ResizeSteps = { Store.shared.resizeSteps }
 
     // The desktop-related command being typed or highlighted, if any.
     var desktopCommand: CommandDef? {
@@ -27,6 +30,11 @@ final class Palette: ObservableObject {
         switch Command.parse(text, defs()) {
         case .layout(let r): return r
         case .tabToWindow(let r): return r
+        case let cmd? where window != nil && screen != nil:
+            // Resize commands: where the window will end up, as a fraction of the screen.
+            guard let s = screen, let r = App.resized(window!, cmd, bounds: s, steps: steps()) else { return nil }
+            return CGRect(x: (r.minX - s.minX) / s.width, y: (r.minY - s.minY) / s.height,
+                          width: r.width / s.width, height: r.height / s.height)
         case nil:
             // Nothing complete typed yet: preview the highlighted row if it's a layout.
             let rows = matches

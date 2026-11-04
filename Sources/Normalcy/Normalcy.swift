@@ -11,6 +11,8 @@ import SwiftUI
 //   t [h|l|k|j|f|c]   move current tab to a new window, optionally placed with a layout
 //   h l k j        window: left / right / top / bottom half
 //   f c            window: full / center
+//   + -            window: 10% bigger / smaller, staying centered
+//   re <h|l|k|j>…  window: narrower / wider / shorter / taller, one step per key
 //   set            open settings
 enum Command: Equatable {
     case open(String)
@@ -19,6 +21,8 @@ enum Command: Equatable {
     case moveToDesktop(CGKeyCode)
     case tabToWindow(CGRect?) // optional layout for the new window
     case layout(CGRect) // fractions of the screen, top-left origin
+    case resize(Int) // steps bigger (or smaller, if negative) around the window's center
+    case resizeEdge(CGSize) // steps to move the right and bottom edges out (or in, if negative)
     case settings
 
     static let digitKeys: [CGKeyCode] = [18, 19, 20, 21, 23, 22, 26, 28, 25] // kVK_ANSI_1...9
@@ -94,6 +98,15 @@ enum Command: Equatable {
             guard let d = lookup(arg, in: defs),
                   let rect = Action(rawValue: d.id).flatMap(layoutRect) else { return nil }
             return .tabToWindow(rect)
+        case .grow: return .resize(1)
+        case .shrink: return .resize(-1)
+        case .resize:
+            // Each direction key is one step: "re ll" = two steps wider.
+            let steps: [Action: CGSize] = [.right: CGSize(width: 1, height: 0), .left: CGSize(width: -1, height: 0),
+                                           .bottom: CGSize(width: 0, height: 1), .top: CGSize(width: 0, height: -1)]
+            let moves = arg.map { steps[direction(String($0), in: defs) ?? .full] }
+            guard !moves.isEmpty, !moves.contains(nil) else { return nil }
+            return .resizeEdge(moves.compactMap { $0 }.reduce(.zero) { CGSize(width: $0.width + $1.width, height: $0.height + $1.height) })
         case .settings: return .settings
         }
     }
@@ -137,7 +150,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
         let pages: [(String, String, AnyView, CGFloat)] = [
-            ("General", "gearshape", AnyView(GeneralSettings()), 440),
+            ("General", "gearshape", AnyView(GeneralSettings()), 580),
             ("Commands", "command", AnyView(CommandSettings()), 680),
         ]
         for (title, icon, view, height) in pages {
@@ -222,10 +235,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         palette.submitContinuing = { [weak self] text in
             guard let self, let cmd = Command.parse(text, Store.shared.defs) else { return NSSound.beep() }
+            // Resizing by direction is done in small steps, so keep "re " ready for the next one.
+            let again = if case .resizeEdge = cmd { (text.split(separator: " ").first.map(String.init) ?? "") + " " } else { "" }
             // The bar stays up. Commands that activate an app take focus from it, so it
             // ignores losing focus until it takes it back once the command has landed.
             continuing = true
-            palette.text = ""
+            palette.text = again
             run(cmd)
             // shortcut: fixed delays, not completion callbacks; lengthen if focus comes back too early.
             let wait: Double = switch cmd {
@@ -277,6 +292,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func show() {
         target = NSWorkspace.shared.frontmostApplication
+        captureWindow()
         palette.text = ""
         palette.desktops = Desktops.read()
         loadWallpaper()
@@ -305,10 +321,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowDidResignKey(_ n: Notification) { if !continuing { hide() } }
 
     // Back to typing after a Shift+Enter command, against whatever app is now in front.
+    // The target window's frame, so resize commands can preview where it will go.
+    func captureWindow() {
+        palette.window = focusedWindow().flatMap(axFrame)
+        palette.screen = Self.screenBounds()
+    }
+
     func refocus() {
         continuing = false
         guard panel.isVisible else { return }
         target = NSWorkspace.shared.frontmostApplication
+        captureWindow()
         palette.desktops = Desktops.read()
         panel.makeKeyAndOrderFront(nil)
         palette.focusToken += 1
@@ -331,6 +354,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             moveWindow(toDesktop: key)
         case .layout(let f):
             place(f)
+        case .resize, .resizeEdge:
+            resizeFocused(cmd)
         case .tabToWindow(let layout):
             // The bar took key focus from the app's window. Hand it back first, or Safari
             // applies the command to a different tab than the one showing.
@@ -481,6 +506,42 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let bounds = CGRect(x: v.minX, y: primary.frame.maxY - v.maxY, width: v.width, height: v.height)
         let target = CGRect(x: bounds.minX + v.width * f.minX, y: bounds.minY + v.height * f.minY,
                             width: v.width * f.width, height: v.height * f.height)
+        setFrame(w, target, bounds: bounds)
+    }
+
+    // Visible area of the bar's screen, in AX coordinates (top-left origin of the primary screen).
+    static func screenBounds() -> CGRect? {
+        guard let v = NSScreen.main?.visibleFrame, let primary = NSScreen.screens.first else { return nil }
+        return CGRect(x: v.minX, y: primary.frame.maxY - v.maxY, width: v.width, height: v.height)
+    }
+
+    func resizeFocused(_ cmd: Command) {
+        guard let w = focusedWindow(), let frame = axFrame(w), let bounds = Self.screenBounds(),
+              let target = Self.resized(frame, cmd, bounds: bounds, steps: Store.shared.resizeSteps) else { return }
+        setFrame(w, target, bounds: bounds)
+    }
+
+    // Where a resize command puts a window, kept within the screen. Steps are from Settings:
+    // .resize scales the window by `steps.scale` per step around its center; .resizeEdge moves the
+    // right and bottom edges by `steps.edge` of the screen per step, keeping the top-left corner
+    // unless the window would leave the screen.
+    static func resized(_ frame: CGRect, _ cmd: Command, bounds: CGRect, steps: ResizeSteps) -> CGRect? {
+        switch cmd {
+        case .resize(let n):
+            let scale = pow(1 + steps.scale, CGFloat(n))
+            let size = CGSize(width: min(frame.width * scale, bounds.width), height: min(frame.height * scale, bounds.height))
+            return CGRect(origin: center(size, in: frame, bounds: bounds), size: size)
+        case .resizeEdge(let d):
+            let size = CGSize(width: min(max(frame.width + d.width * steps.edge * bounds.width, 100), bounds.width),
+                              height: min(max(frame.height + d.height * steps.edge * bounds.height, 100), bounds.height))
+            let origin = CGPoint(x: min(frame.minX, bounds.maxX - size.width), y: min(frame.minY, bounds.maxY - size.height))
+            return CGRect(origin: origin, size: size)
+        default: return nil
+        }
+    }
+
+    // Target rect in AX coordinates (top-left origin of the primary screen).
+    func setFrame(_ w: AXUIElement, _ target: CGRect, bounds: CGRect) {
         var origin = target.origin, size = target.size
         AXUIElementSetAttributeValue(w, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &origin)!)
         AXUIElementSetAttributeValue(w, kAXSizeAttribute as CFString, AXValueCreate(.cgSize, &size)!)
@@ -696,6 +757,29 @@ enum Main {
         precondition(HotKey(event: keyEvent([.option], " ", kVK_Space)) == .standard)
         precondition(HotKey(event: keyEvent([.command, .shift], "k", kVK_ANSI_K))?.label == "⇧⌘ K")
         precondition(HotKey(event: keyEvent([.shift], "k", kVK_ANSI_K)) == nil)
+        precondition(Command.parse("+", d) == .resize(1) && Command.parse("-", d) == .resize(-1))
+        precondition(Command.parse("re l", d) == .resizeEdge(CGSize(width: 1, height: 0)))
+        precondition(Command.parse("re hh", d) == .resizeEdge(CGSize(width: -2, height: 0)))
+        precondition(Command.parse("re →↓", d) == .resizeEdge(CGSize(width: 1, height: 1)))
+        // Grow then shrink by the same step lands back on the original size.
+        let unit = CGRect(x: 0, y: 0, width: 1000, height: 1000), steps = ResizeSteps(scale: 0.2, edge: 0.1)
+        let grown = App.resized(CGRect(x: 100, y: 100, width: 400, height: 400), .resize(1), bounds: unit, steps: steps)!
+        precondition(abs(grown.width - 480) < 0.001)
+        precondition(abs(App.resized(grown, .resize(-1), bounds: unit, steps: steps)!.width - 400) < 0.001)
+        precondition(App.resized(CGRect(x: 0, y: 0, width: 400, height: 400), .resizeEdge(CGSize(width: 2, height: 0)),
+                                 bounds: unit, steps: steps)!.width == 600)
+        precondition(Command.parse("re x", d) == nil && Command.parse("re", d) == nil)
+        precondition(Command.parse("t +", d) == nil)
+        // Resizes preview where the window will go.
+        let rp = Palette()
+        rp.defs = { d }
+        rp.steps = { ResizeSteps() }
+        rp.screen = CGRect(x: 0, y: 0, width: 1000, height: 1000)
+        rp.window = CGRect(x: 100, y: 100, width: 400, height: 400)
+        rp.text = "re l"
+        precondition(rp.layoutPreview == CGRect(x: 0.1, y: 0.1, width: 0.45, height: 0.4))
+        rp.text = "o Safari"
+        precondition(rp.layoutPreview == nil) // resizing isn't a place for a new tab window
         // A window that kept its size is centered in the target area, and stays on screen.
         let screen = CGRect(x: 0, y: 25, width: 1000, height: 800)
         precondition(App.center(CGSize(width: 400, height: 300), in: screen, bounds: screen) == CGPoint(x: 300, y: 275))

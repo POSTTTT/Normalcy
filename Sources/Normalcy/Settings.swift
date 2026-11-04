@@ -4,6 +4,7 @@ import SwiftUI
 enum Action: String, CaseIterable {
     case open, focus, desktop, move, tab, left, right, top, bottom, full, center
     case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
+    case grow, shrink, resize
     case settings
 
     // Left, down, up, right: the direction keys are these commands' triggers.
@@ -29,6 +30,9 @@ enum Action: String, CaseIterable {
         case .topRight: "lk"
         case .bottomLeft: "hj"
         case .bottomRight: "lj"
+        case .grow: "+"
+        case .shrink: "-"
+        case .resize: "re"
         case .settings: "set"
         }
     }
@@ -53,6 +57,9 @@ enum Action: String, CaseIterable {
         case .topRight: "Top Right Quarter"
         case .bottomLeft: "Bottom Left Quarter"
         case .bottomRight: "Bottom Right Quarter"
+        case .grow: "Make Bigger"
+        case .shrink: "Make Smaller"
+        case .resize: "Resize by Direction"
         case .settings: "Settings"
         }
     }
@@ -77,6 +84,9 @@ enum Action: String, CaseIterable {
         case .topRight: "rectangle.inset.topright.filled"
         case .bottomLeft: "rectangle.inset.bottomleft.filled"
         case .bottomRight: "rectangle.inset.bottomright.filled"
+        case .grow: "arrow.up.left.and.arrow.down.right"
+        case .shrink: "arrow.down.right.and.arrow.up.left"
+        case .resize: "arrow.up.and.down.and.arrow.left.and.right"
         case .settings: "gearshape"
         }
     }
@@ -90,6 +100,7 @@ enum Action: String, CaseIterable {
         case .leftThird, .centerThird, .rightThird: "Thirds"
         case .topLeft, .topRight, .bottomLeft, .bottomRight: "Quarters"
         case .full, .center: "Fill & Center"
+        case .grow, .shrink, .resize: "Resize"
         case .settings: "Other"
         }
     }
@@ -100,6 +111,7 @@ enum Action: String, CaseIterable {
         case .open, .focus: "app"
         case .desktop, .move: "1-9 <left> <right>"
         case .tab: "<left> <right> <up> <down> f c"
+        case .resize: "<left> <right> <up> <down>"
         default: nil
         }
     }
@@ -110,6 +122,7 @@ enum Action: String, CaseIterable {
         case .open, .focus: "app"
         case .desktop, .move: "number or direction"
         case .tab: "position"
+        case .resize: "direction"
         default: nil
         }
     }
@@ -124,6 +137,7 @@ enum Action: String, CaseIterable {
         case .focus: "<trigger> saf — matches the start of the app name"
         case .desktop, .move: "<trigger> 2, or <trigger> <left> / <trigger> <right> for left / right"
         case .tab: "<trigger>, or <trigger> <left> to put the new window on the left"
+        case .resize: "<trigger> <right> wider, <trigger> <left> narrower, <trigger> <down> taller, <trigger> <up> shorter"
         default: nil
         }
     }
@@ -187,6 +201,12 @@ struct HotKey: Codable, Equatable {
     }
 }
 
+// How much one resize step changes a window, as fractions.
+struct ResizeSteps {
+    var scale: CGFloat = 0.1 // + / -: 10% bigger, and the same back down
+    var edge: CGFloat = 0.05 // re: 5% of the screen per direction key
+}
+
 enum Style: String, CaseIterable { case bar, minimal }
 enum Position: String, CaseIterable { case top, center, bottom }
 
@@ -211,6 +231,13 @@ final class Store: ObservableObject {
         .flatMap { try? JSONDecoder().decode(HotKey.self, from: $0) } ?? .standard {
         didSet { UserDefaults.standard.set(try? JSONEncoder().encode(hotKey), forKey: "hotKey") }
     }
+    @Published var growPercent = UserDefaults.standard.object(forKey: "growPercent") as? Int ?? 10 {
+        didSet { UserDefaults.standard.set(growPercent, forKey: "growPercent") }
+    }
+    @Published var edgePercent = UserDefaults.standard.object(forKey: "edgePercent") as? Int ?? 5 {
+        didSet { UserDefaults.standard.set(edgePercent, forKey: "edgePercent") }
+    }
+    var resizeSteps: ResizeSteps { ResizeSteps(scale: CGFloat(growPercent) / 100, edge: CGFloat(edgePercent) / 100) }
     @Published var recordingHotKey = false // the shortcut is paused while a new one is typed
     @Published var hotKeyTaken = false // registering failed: another app holds this shortcut
 
@@ -278,6 +305,19 @@ struct GeneralSettings: View {
                 Toggle("Show spaces as ␣", isOn: $store.showSpaces)
             }
             .disabled(store.style == .bar)
+            Section {
+                Stepper(value: $store.growPercent, in: 1...50) {
+                    LabeledContent("Bigger / smaller step", value: "\(store.growPercent)%")
+                }
+                Stepper(value: $store.edgePercent, in: 1...25) {
+                    LabeledContent("Resize by direction step", value: "\(store.edgePercent)% of screen")
+                }
+            } header: {
+                Text("Resize")
+            } footer: {
+                Text("How much + and - change the window, and how far each direction key moves an edge after re.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
     }

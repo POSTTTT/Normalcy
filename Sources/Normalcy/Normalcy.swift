@@ -195,6 +195,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }()
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        // The icon macOS shows for Normalcy, e.g. in alerts and app switchers.
+        NSApp.applicationIconImage = Bundle.module.url(forResource: "AppIcon", withExtension: "png").flatMap(NSImage.init(contentsOf:))
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
         buildPanel()
         registerHotKey()

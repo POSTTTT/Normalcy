@@ -73,6 +73,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let panel = Panel(contentRect: NSRect(x: 0, y: 0, width: 600, height: 780),
                       styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
     let palette = Palette()
+    let preview = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
     var hotKey: EventHotKeyRef?
     var target: NSRunningApplication?
     static let runNotification = Notification.Name("com.normalcy.run")
@@ -167,6 +168,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         palette.cancel = { [weak self] in self?.hide() }
         panel.contentView = NSHostingView(rootView: PaletteView(model: palette))
+        preview.contentView = NSHostingView(rootView: LayoutPreview(model: palette))
+        preview.isOpaque = false
+        preview.backgroundColor = .clear
+        preview.hasShadow = false
+        preview.ignoresMouseEvents = true
+        preview.level = .floating
+        preview.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false // SwiftUI draws its own; the window shadow would outline the empty area
@@ -196,12 +204,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // A screen-tall column; the view places its content inside by style and position.
         if let v = NSScreen.main?.visibleFrame {
             panel.setFrame(NSRect(x: v.midX - 300, y: v.minY, width: 600, height: v.height), display: false)
+            preview.setFrame(v, display: false) // same area window commands fill
         }
+        preview.orderFront(nil) // first, so the bar stays above it
         panel.makeKeyAndOrderFront(nil)
         DispatchQueue.main.async { self.palette.focusToken += 1 }
     }
 
-    func hide() { panel.orderOut(nil) }
+    func hide() {
+        panel.orderOut(nil)
+        preview.orderOut(nil)
+    }
 
     func windowDidResignKey(_ n: Notification) { hide() }
 
@@ -467,6 +480,17 @@ enum Main {
         precondition(Palette.keyBlocks("o Safari", showSpaces: true) == ["o", "␣", "Safari"])
         precondition(Palette.keyBlocks("   ", showSpaces: false) == [])
         precondition(Palette.keyBlocks("d ", showSpaces: true) == ["d", "␣"])
+        // Layout preview follows the typed or highlighted window command.
+        let q = Palette()
+        q.defs = { d }
+        q.text = "h"
+        precondition(q.layoutPreview == CGRect(x: 0, y: 0, width: 0.5, height: 1))
+        q.text = "t l"
+        precondition(q.layoutPreview == CGRect(x: 0.5, y: 0, width: 0.5, height: 1))
+        q.text = "o Safari"
+        precondition(q.layoutPreview == nil)
+        q.text = "ha" // no exact match; selected row "Left Half" (title match) still previews
+        precondition(q.layoutPreview == CGRect(x: 0, y: 0, width: 0.5, height: 1))
         print("selftest ok")
     }
 }

@@ -20,6 +20,21 @@ final class Palette: ObservableObject {
     }
 
     // Desktop number the typed argument points at ("2", or "h"/"l" relative to the current one).
+    // Screen area (fractions, top-left origin) the typed or highlighted window command would use.
+    var layoutPreview: CGRect? {
+        switch Command.parse(text, defs()) {
+        case .layout(let r): return r
+        case .tabToWindow(let r): return r
+        case nil:
+            // Nothing complete typed yet: preview the highlighted row if it's a layout.
+            let rows = matches
+            guard !text.contains(" "), rows.indices.contains(selected),
+                  let a = Action(rawValue: rows[selected].id) else { return nil }
+            return Command.layoutRect(a)
+        default: return nil
+        }
+    }
+
     var desktopTarget: Int? {
         let parts = text.split(separator: " ")
         guard parts.count > 1 else { return nil }
@@ -207,6 +222,26 @@ struct PaletteView: View {
         .background(selected ? Color.primary.opacity(0.1) : .clear,
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contentShape(Rectangle())
+    }
+}
+
+// Full-screen, click-through layer under the bar: a translucent box where the window will go,
+// like macOS's own tiling preview.
+struct LayoutPreview: View {
+    @ObservedObject var model: Palette
+
+    var body: some View {
+        GeometryReader { g in
+            if let r = model.layoutPreview {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.18))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.55), lineWidth: 2))
+                    .frame(width: g.size.width * r.width - 16, height: g.size.height * r.height - 16)
+                    .position(x: g.size.width * r.midX, y: g.size.height * r.midY)
+                    .animation(.spring(duration: 0.25), value: r)
+            }
+        }
     }
 }
 

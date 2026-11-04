@@ -175,7 +175,7 @@ struct CommandSettings: View {
                 }
             } footer: {
                 HStack(alignment: .top) {
-                    Text("The trigger is what you type. Switch a command off to hide it.")
+                    Text("The trigger is what you type. Switch a command off to hide it.\nArrow keys work like h j k l. Tab or Ctrl+N / Ctrl+P move through the list.")
                         .font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     Button("Reset to Defaults") { store.defs = CommandDef.defaults }

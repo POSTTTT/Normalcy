@@ -49,7 +49,7 @@ final class Palette: ObservableObject {
         let s = text.drop { $0 == " " }
         guard let head = s.split(separator: " ").first.map(String.init) else { return defs }
         if s.contains(" ") { return defs.filter { $0.trigger == head } }
-        let exact = defs.filter { $0.trigger == head }
+        let exact = defs.filter { $0.trigger == head || Command.arrowAction(head)?.rawValue == $0.id }
         let prefix = defs.filter { $0.trigger != head && $0.trigger.hasPrefix(head) }
         let title = defs.filter {
             !$0.trigger.hasPrefix(head) && (Action(rawValue: $0.id)?.title ?? "").localizedCaseInsensitiveContains(head)
@@ -66,6 +66,29 @@ final class Palette: ObservableObject {
             if showSpaces { out.append("␣") }
         }
         if !word.isEmpty { out.append(word) }
+        return out
+    }
+
+    // Arrow keys type ← ↓ ↑ →, which work like h j k l. Right after a command that takes a
+    // direction (t, d, m) they add the space too, so "t" + ← becomes "t ←".
+    func typeArrow(_ letter: String) {
+        let head = text.trimmingCharacters(in: .whitespaces)
+        let takesArg = defs().contains {
+            $0.enabled && $0.trigger == head && Action(rawValue: $0.id)?.argHint != nil
+        }
+        text = takesArg && !text.hasSuffix(" ") ? head + " " + letter : text + letter
+    }
+
+    // Arrow glyphs sit cramped in a monospaced font; put a gap beside each arrow inside a block.
+    static func spacedArrows(_ word: String) -> String {
+        var out = ""
+        for ch in word {
+            if let last = out.last,
+               Command.arrowAction(String(ch)) != nil || Command.arrowAction(String(last)) != nil {
+                out.append("\u{2009}") // thin space
+            }
+            out.append(ch)
+        }
         return out
     }
 
@@ -128,9 +151,22 @@ struct PaletteView: View {
             .font(.system(size: 22))
             .focused($focused)
             .onSubmit { model.enter() }
-            .onKeyPress(.downArrow) { model.move(1); return .handled }
-            .onKeyPress(.upArrow) { model.move(-1); return .handled }
-            .onKeyPress(.escape) { model.cancel(); return .handled }
+            .onKeyPress(phases: .down) { press in
+                switch press.key {
+                case .leftArrow: model.typeArrow("←")
+                case .downArrow: model.typeArrow("↓")
+                case .upArrow: model.typeArrow("↑")
+                case .rightArrow: model.typeArrow("→")
+                // The list highlight moves with Tab / Shift+Tab or Vim's Ctrl+N / Ctrl+P.
+                case .tab: model.move(press.modifiers.contains(.shift) ? -1 : 1)
+                case KeyEquivalent("\u{19}"): model.move(-1) // Shift+Tab can arrive as backtab
+                case "n" where press.modifiers.contains(.control): model.move(1)
+                case "p" where press.modifiers.contains(.control): model.move(-1)
+                case .escape: model.cancel()
+                default: return .ignored
+                }
+                return .handled
+            }
     }
 
     @ViewBuilder var content: some View {
@@ -156,7 +192,7 @@ struct PaletteView: View {
         HStack(spacing: 8) {
             ForEach(Array(Palette.keyBlocks(model.text, showSpaces: store.showSpaces).enumerated()),
                     id: \.offset) { _, word in
-                Text(word)
+                Text(Palette.spacedArrows(String(word)))
                     .font(.system(size: 22, weight: .medium, design: .monospaced))
                     .padding(.horizontal, 14)
                     .frame(minWidth: 44, minHeight: 44)

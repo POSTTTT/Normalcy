@@ -22,9 +22,20 @@ enum Command: Equatable {
 
     static let digitKeys: [CGKeyCode] = [18, 19, 20, 21, 23, 22, 26, 28, 25] // kVK_ANSI_1...9
 
+    // Arrow keys type these symbols; they stand for the matching direction command,
+    // whatever its trigger has been renamed to.
+    static func arrowAction(_ s: String) -> Action? {
+        ["←": .left, "→": .right, "↑": .top, "↓": .bottom][s]
+    }
+
+    // Enabled command for a typed word: its trigger, or an arrow symbol.
+    static func lookup(_ word: String, in defs: [CommandDef]) -> CommandDef? {
+        defs.first { $0.enabled && ($0.trigger == word || arrowAction(word)?.rawValue == $0.id) }
+    }
+
     static func desktopKey(_ arg: String) -> CGKeyCode? {
-        if arg == "h" { return 123 }
-        if arg == "l" { return 124 }
+        if arg == "h" || arg == "←" { return 123 }
+        if arg == "l" || arg == "→" { return 124 }
         if let n = Int(arg), (1...9).contains(n) { return digitKeys[n - 1] }
         return nil
     }
@@ -33,7 +44,7 @@ enum Command: Equatable {
         let s = input.trimmingCharacters(in: .whitespaces)
         let parts = s.split(separator: " ", maxSplits: 1).map(String.init)
         guard let head = parts.first,
-              let def = defs.first(where: { $0.enabled && $0.trigger == head }),
+              let def = lookup(head, in: defs),
               let action = Action(rawValue: def.id) else { return nil }
         let arg = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespaces) : ""
         switch action {
@@ -45,7 +56,7 @@ enum Command: Equatable {
         case .tab:
             if arg.isEmpty { return .tabToWindow(nil) }
             // Argument is a window-layout trigger, e.g. "t h" = new window on the left half.
-            guard let d = defs.first(where: { $0.enabled && $0.trigger == arg }),
+            guard let d = lookup(arg, in: defs),
                   let rect = Action(rawValue: d.id).flatMap(layoutRect) else { return nil }
             return .tabToWindow(rect)
         case .settings: return .settings
@@ -480,6 +491,28 @@ enum Main {
         precondition(Palette.keyBlocks("o Safari", showSpaces: true) == ["o", "␣", "Safari"])
         precondition(Palette.keyBlocks("   ", showSpaces: false) == [])
         precondition(Palette.keyBlocks("d ", showSpaces: true) == ["d", "␣"])
+        precondition(Palette.keyBlocks("←↓", showSpaces: false) == ["←↓"])
+        precondition(Palette.spacedArrows("←↓") == "←\u{2009}↓")
+        precondition(Palette.spacedArrows("set") == "set")
+        // Arrow keys type h j k l, adding the space after a command that takes a direction.
+        let r = Palette()
+        r.defs = { d }
+        r.typeArrow("←")
+        precondition(r.text == "←" && r.matches.first?.id == "left")
+        precondition(Command.parse("←", d) == .layout(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
+        precondition(Command.parse("↓", d) == .layout(CGRect(x: 0, y: 0.5, width: 1, height: 0.5)))
+        r.text = "t"
+        r.typeArrow("←")
+        precondition(r.text == "t ←")
+        precondition(Command.parse("t ←", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
+        r.text = "d "
+        r.typeArrow("→")
+        precondition(r.text == "d →" && Command.parse("d →", d) == .ctrlKey(124))
+        precondition(Command.parse("d ↑", d) == nil) // desktops only go left/right
+        var renamed = d
+        renamed[renamed.firstIndex { $0.id == "left" }!].trigger = "a"
+        precondition(Command.parse("←", renamed) == .layout(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
+
         // Layout preview follows the typed or highlighted window command.
         let q = Palette()
         q.defs = { d }

@@ -175,9 +175,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         palette.desktops = Desktops.read()
         loadWallpaper()
         snapshotDesktop()
-        if let s = NSScreen.main?.frame {
-            panel.setFrameOrigin(NSPoint(x: s.midX - panel.frame.width / 2,
-                                         y: s.maxY - s.height * 0.2 - panel.frame.height))
+        // A screen-tall column; the view places its content inside by style and position.
+        if let v = NSScreen.main?.visibleFrame {
+            panel.setFrame(NSRect(x: v.midX - 300, y: v.minY, width: 600, height: v.height), display: false)
         }
         panel.makeKeyAndOrderFront(nil)
         DispatchQueue.main.async { self.palette.focusToken += 1 }
@@ -444,6 +444,11 @@ enum Main {
         precondition(p.desktopTarget == 4)
         p.text = "f"
         precondition(p.desktopCommand == nil)
+        // Minimal style key-cap blocks.
+        precondition(Palette.keyBlocks("o Safari", showSpaces: false) == ["o", "Safari"])
+        precondition(Palette.keyBlocks("o Safari", showSpaces: true) == ["o", "␣", "Safari"])
+        precondition(Palette.keyBlocks("   ", showSpaces: false) == [])
+        precondition(Palette.keyBlocks("d ", showSpaces: true) == ["d", "␣"])
         print("selftest ok")
     }
 }

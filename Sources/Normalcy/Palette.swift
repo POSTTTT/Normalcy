@@ -42,6 +42,18 @@ final class Palette: ObservableObject {
         return exact + prefix + title
     }
 
+    // Minimal style's key-cap blocks: one per word, plus a "␣" block per space if asked.
+    static func keyBlocks(_ text: String, showSpaces: Bool) -> [String] {
+        var out: [String] = [], word = ""
+        for ch in text {
+            if ch != " " { word.append(ch); continue }
+            if !word.isEmpty { out.append(word); word = "" }
+            if showSpaces { out.append("␣") }
+        }
+        if !word.isEmpty { out.append(word) }
+        return out
+    }
+
     func move(_ by: Int) {
         let n = matches.count
         if n > 0 { selected = (selected + by + n) % n }
@@ -63,36 +75,79 @@ struct PaletteView: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        let rows = model.matches
-        VStack(spacing: 10) {
-            TextField("Type a command", text: $model.text)
-                .textFieldStyle(.plain)
-                .font(.system(size: 22))
-                .focused($focused)
-                .onSubmit { model.enter() }
-                .onKeyPress(.downArrow) { model.move(1); return .handled }
-                .onKeyPress(.upArrow) { model.move(-1); return .handled }
-                .onKeyPress(.escape) { model.cancel(); return .handled }
-                .padding(.horizontal, 24)
-                .frame(height: 60)
-                .glass(Capsule())
-            if let cmd = model.desktopCommand, model.desktops.count > 0 {
-                desktopStrip(cmd)
-            }
-            if !rows.isEmpty {
-                VStack(spacing: 2) {
-                    ForEach(Array(rows.enumerated()), id: \.element.id) { i, d in
-                        row(d, selected: i == model.selected)
-                            .onTapGesture { model.selected = i; model.enter() }
-                    }
+        let minimal = store.style == .minimal
+        // The command bar style always sits near the top; the minimal style uses the chosen position.
+        let position = minimal ? store.position : .top
+        let alignment: Alignment = switch position {
+        case .top: .top
+        case .center: .center
+        case .bottom: .bottom
+        }
+        GeometryReader { g in
+            VStack(spacing: 10) {
+                if minimal {
+                    // Still receives the typing; only the letter squares below show it.
+                    field.frame(width: 1, height: 1).opacity(0)
+                    if position == .top { keys }
+                    content
+                    if position != .top { keys }
+                } else {
+                    field
+                        .padding(.horizontal, 24)
+                        .frame(height: 60)
+                        .glass(Capsule())
+                    content
                 }
-                .padding(8)
-                .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            }
+            .padding(20) // room for the shadow
+            .padding(.top, position == .top ? g.size.height * 0.15 : 0)
+            .padding(.bottom, position == .bottom ? g.size.height * 0.08 : 0)
+            .frame(width: g.size.width, height: g.size.height, alignment: alignment)
+        }
+        .onChange(of: model.focusToken) { focused = true }
+    }
+
+    var field: some View {
+        TextField("Type a command", text: $model.text)
+            .textFieldStyle(.plain)
+            .font(.system(size: 22))
+            .focused($focused)
+            .onSubmit { model.enter() }
+            .onKeyPress(.downArrow) { model.move(1); return .handled }
+            .onKeyPress(.upArrow) { model.move(-1); return .handled }
+            .onKeyPress(.escape) { model.cancel(); return .handled }
+    }
+
+    @ViewBuilder var content: some View {
+        let rows = model.matches
+        if let cmd = model.desktopCommand, model.desktops.count > 0 {
+            desktopStrip(cmd)
+        }
+        if store.showList, !rows.isEmpty {
+            VStack(spacing: 2) {
+                ForEach(Array(rows.enumerated()), id: \.element.id) { i, d in
+                    row(d, selected: i == model.selected)
+                        .onTapGesture { model.selected = i; model.enter() }
+                }
+            }
+            .padding(8)
+            .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        }
+    }
+
+    // Minimal style: one key-cap block per typed word, so "o Safari" shows [o] [Safari];
+    // nothing when empty. shortcut: long input runs past the panel edge; wrap if that becomes a problem.
+    var keys: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(Palette.keyBlocks(model.text, showSpaces: store.showSpaces).enumerated()),
+                    id: \.offset) { _, word in
+                Text(word)
+                    .font(.system(size: 22, weight: .medium, design: .monospaced))
+                    .padding(.horizontal, 14)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .glass(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
         }
-        .padding(20) // room for the shadow
-        .frame(width: 600, height: 780, alignment: .top)
-        .onChange(of: model.focusToken) { focused = true }
     }
 
     // Mission Control-style thumbnails: target gets the accent border, current a faint one.

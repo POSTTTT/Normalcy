@@ -93,9 +93,25 @@ struct CommandDef: Codable, Identifiable, Equatable {
     static let defaults = Action.allCases.map { CommandDef(id: $0.rawValue, trigger: $0.defaultTrigger) }
 }
 
+enum Style: String, CaseIterable { case bar, minimal }
+enum Position: String, CaseIterable { case top, center, bottom }
+
 final class Store: ObservableObject {
     static let shared = Store()
     private let key = "commands"
+
+    @Published var style = Style(rawValue: UserDefaults.standard.string(forKey: "style") ?? "") ?? .bar {
+        didSet { UserDefaults.standard.set(style.rawValue, forKey: "style") }
+    }
+    @Published var showList = UserDefaults.standard.object(forKey: "showList") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showList, forKey: "showList") }
+    }
+    @Published var showSpaces = UserDefaults.standard.bool(forKey: "showSpaces") {
+        didSet { UserDefaults.standard.set(showSpaces, forKey: "showSpaces") }
+    }
+    @Published var position = Position(rawValue: UserDefaults.standard.string(forKey: "position") ?? "") ?? .bottom {
+        didSet { UserDefaults.standard.set(position.rawValue, forKey: "position") }
+    }
 
     @Published var defs: [CommandDef] {
         didSet { UserDefaults.standard.set(try? JSONEncoder().encode(defs), forKey: key) }
@@ -122,6 +138,21 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            Picker("Style", selection: $store.style) {
+                Text("Command bar").tag(Style.bar)
+                Text("Minimal").tag(Style.minimal)
+            }
+            .pickerStyle(.segmented)
+            Picker("Position", selection: $store.position) {
+                ForEach(Position.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .disabled(store.style == .bar)
+            .help("Where the minimal style shows the typed letters")
+            Toggle("Show spaces as ␣", isOn: $store.showSpaces)
+                .disabled(store.style == .bar)
+            Toggle("Show command list", isOn: $store.showList)
+            Divider()
             HStack {
                 Text("Show").frame(width: 40, alignment: .leading)
                 Text("Trigger").frame(width: 90, alignment: .leading)

@@ -383,11 +383,20 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
-    // Running apps, most recently used first (like Cmd+Tab), then the rest by name.
+    // The apps Cmd+Tab shows: ones with a window showing on this desktop, plus Finder, most
+    // recently used first, then the rest by name.
     func runningApps() -> [AppItem] {
         let rank = { (pid: pid_t) in self.recentApps.firstIndex(of: pid) ?? Int.max }
+        let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        let withWindow = Set(info.compactMap { w -> pid_t? in
+            guard (w[kCGWindowLayer as String] as? Int) == 0,
+                  let b = w[kCGWindowBounds as String] as? NSDictionary,
+                  let f = CGRect(dictionaryRepresentation: b), f.width > 50, f.height > 50 else { return nil }
+            return w[kCGWindowOwnerPID as String] as? pid_t
+        })
         return NSWorkspace.shared.runningApplications
             .filter { $0.activationPolicy == .regular && $0 != NSRunningApplication.current }
+            .filter { withWindow.contains($0.processIdentifier) || $0.bundleIdentifier == "com.apple.finder" }
             .map { AppItem(name: $0.localizedName ?? "", icon: $0.icon, pid: $0.processIdentifier) }
             .sorted { (rank($0.pid), $0.name.lowercased()) < (rank($1.pid), $1.name.lowercased()) }
     }

@@ -20,7 +20,7 @@ Press **Option+Space** (change it in Settings > General) to open the command bar
 | Command | Action |
 |---|---|
 | `o Safari` | Open or launch an app |
-| `b saf` | Switch to a running app whose name starts with the text |
+| `b saf` | Switch to a running app whose name starts with the text. The list shows what Cmd+Tab shows: apps with a window on this desktop, plus Finder |
 | `d 2` | Go to desktop 2 (1–9) |
 | `d h` / `d l` | Go to the desktop on the left / right |
 | `m 2` / `m h` / `m l` | Move the current window to desktop 2 / left / right, and follow it |

@@ -160,12 +160,15 @@ final class Palette: ObservableObject {
         let s = text.drop { $0 == " " }
         guard let sp = s.firstIndex(of: " ") else { return nil }
         let pool: [AppItem]
-        switch Command.lookup(String(s[..<sp]), in: defs())?.id {
+        let id = Command.lookup(String(s[..<sp]), in: defs())?.id
+        switch id {
         case Action.focus.rawValue: pool = apps
         case Action.open.rawValue: pool = installed
         default: return nil
         }
         let q = s[s.index(after: sp)...].trimmingCharacters(in: .whitespaces).lowercased()
+        // "b h": a direction key switches windows, so no app list.
+        if id == Action.focus.rawValue, Command.direction(q, in: defs()) != nil { return nil }
         return pool.filter { q.isEmpty || $0.name.lowercased().hasPrefix(q) }
     }
 

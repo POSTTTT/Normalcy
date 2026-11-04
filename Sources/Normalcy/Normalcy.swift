@@ -18,6 +18,7 @@ import SwiftUI
 enum Command: Equatable {
     case open(String)
     case focus(String)
+    case focusWindow(Action) // the nearest window on this desktop to the left / right / top / bottom
     case ctrlKey(CGKeyCode)
     case moveToDesktop(CGKeyCode)
     case tabToWindow(CGRect?) // optional layout for the new window
@@ -88,7 +89,9 @@ enum Command: Equatable {
         let arg = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespaces) : ""
         switch action {
         case .open: return arg.isEmpty ? nil : .open(arg)
-        case .focus: return arg.isEmpty ? nil : .focus(arg)
+        case .focus:
+            if let d = direction(arg, in: defs) { return .focusWindow(d) }
+            return arg.isEmpty ? nil : .focus(arg)
         case .desktop: return desktopKey(arg, defs).map { .ctrlKey($0) }
         case .move: return desktopKey(arg, defs).map { .moveToDesktop($0) }
         case .left, .right, .top, .bottom, .full, .center, .leftThird, .centerThird, .rightThird,
@@ -439,6 +442,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let apps = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
             let name = { (a: NSRunningApplication) in (a.localizedName ?? "").lowercased() }
             (apps.first { name($0) == q.lowercased() } ?? apps.first { name($0).hasPrefix(q.lowercased()) })?.activate()
+        case .focusWindow(let dir):
+            focusWindow(dir)
         case .ctrlKey(let key):
             // Let the window server drop the hidden bar before the desktop slides.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -585,6 +590,48 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    // Switches to the nearest window on this desktop in that direction from the front window.
+    func focusWindow(_ dir: Action) {
+        let regular = Set(NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular && $0 != NSRunningApplication.current }.map(\.processIdentifier))
+        let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        let wins: [(pid: pid_t, frame: CGRect)] = info.compactMap { w in
+            guard (w[kCGWindowLayer as String] as? Int) == 0,
+                  let pid = w[kCGWindowOwnerPID as String] as? pid_t, regular.contains(pid),
+                  let b = w[kCGWindowBounds as String] as? NSDictionary,
+                  let f = CGRect(dictionaryRepresentation: b), f.width > 50, f.height > 50 else { return nil }
+            return (pid, f)
+        }
+        // The list is front to back, so the target app's first window is the one in front.
+        guard let cur = wins.firstIndex(where: { $0.pid == target?.processIdentifier }),
+              let i = Self.neighbor(of: wins[cur].frame, in: wins.map(\.frame), toward: dir, skip: cur),
+              let app = NSRunningApplication(processIdentifier: wins[i].pid) else { return NSSound.beep() }
+        let ax: [AXUIElement] = axAttr(AXUIElementCreateApplication(app.processIdentifier), kAXWindowsAttribute) ?? []
+        if let w = ax.first(where: { axFrame($0) == wins[i].frame }) {
+            AXUIElementSetAttributeValue(w, kAXMainAttribute as CFString, kCFBooleanTrue)
+            AXUIElementPerformAction(w, kAXRaiseAction as CFString)
+        }
+        app.activate()
+    }
+
+    // Index of the closest frame whose center lies that way from `cur`'s center; sideways
+    // distance counts double so the window straight ahead wins over one off to the side.
+    static func neighbor(of cur: CGRect, in frames: [CGRect], toward dir: Action, skip: Int) -> Int? {
+        let score = { (f: CGRect) -> CGFloat? in
+            let dx = f.midX - cur.midX, dy = f.midY - cur.midY
+            let (ahead, side): (CGFloat, CGFloat) = switch dir {
+            case .left: (-dx, dy)
+            case .right: (dx, dy)
+            case .top: (-dy, dx)
+            default: (dy, dx)
+            }
+            return ahead > 0 ? ahead + 2 * abs(side) : nil
+        }
+        return frames.indices.filter { $0 != skip && frames[$0] != cur }
+            .compactMap { i in score(frames[i]).map { (i, $0) } }
+            .min { $0.1 < $1.1 }?.0
+    }
+
     func focusedWindow() -> AXUIElement? {
         guard let app = target else { return nil }
         var win: CFTypeRef?
@@ -724,6 +771,14 @@ enum Main {
         precondition(Command.parse("o Safari", d) == .open("Safari"))
         precondition(Command.parse("o Visual Studio Code", d) == .open("Visual Studio Code"))
         precondition(Command.parse("b saf", d) == .focus("saf"))
+        precondition(Command.parse("b h", d) == .focusWindow(.left))
+        precondition(Command.parse("b ho", d) == .focus("ho"))
+        let tiles = [CGRect(x: 0, y: 0, width: 100, height: 100), CGRect(x: 200, y: 0, width: 100, height: 100),
+                     CGRect(x: 200, y: 200, width: 100, height: 100), CGRect(x: 400, y: 150, width: 100, height: 100)]
+        precondition(App.neighbor(of: tiles[0], in: tiles, toward: .right, skip: 0) == 1)
+        precondition(App.neighbor(of: tiles[1], in: tiles, toward: .bottom, skip: 1) == 2)
+        precondition(App.neighbor(of: tiles[1], in: tiles, toward: .left, skip: 1) == 0)
+        precondition(App.neighbor(of: tiles[0], in: tiles, toward: .top, skip: 0) == nil)
         precondition(Command.parse("d 2", d) == .ctrlKey(19))
         precondition(Command.parse("d l", d) == .ctrlKey(124))
         precondition(Command.parse("d 0", d) == nil)

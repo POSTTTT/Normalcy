@@ -116,7 +116,8 @@ enum Action: String, CaseIterable {
     // nil when the command takes no argument.
     var argHint: String? {
         switch self {
-        case .open, .focus: "app"
+        case .open: "app"
+        case .focus: "app <left> <down> <up> <right>"
         case .desktop, .move: "1-9 <left> <right>"
         case .tab: "<left> <right> <up> <down> f c"
         case .resize: "<left> <right> <up> <down>"
@@ -128,7 +129,8 @@ enum Action: String, CaseIterable {
     // What the argument is, shown in the empty key cap after the command and a space.
     var argName: String? {
         switch self {
-        case .open, .focus: "app"
+        case .open: "app"
+        case .focus: "app or direction"
         case .desktop, .move: "number or direction"
         case .tab: "position"
         case .resize, .scroll: "direction"
@@ -143,7 +145,7 @@ enum Action: String, CaseIterable {
     var example: String? {
         switch self {
         case .open: "<trigger> Safari"
-        case .focus: "<trigger> saf — matches the start of the app name"
+        case .focus: "<trigger> saf — matches the start of the app name; <trigger> <left> <down> <up> <right> switches to the nearest window that way"
         case .desktop, .move: "<trigger> 2, or <trigger> <left> / <trigger> <right> for left / right"
         case .tab: "<trigger>, or <trigger> <left> to put the new window on the left"
         case .scroll: "<trigger>, then <down> <up> <left> <right> scroll as you press them; Esc to stop"

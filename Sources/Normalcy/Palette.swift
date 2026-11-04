@@ -41,7 +41,11 @@ final class Palette: ObservableObject {
         guard parts.count > 1 else { return nil }
         if let n = Int(parts[1]) { return n }
         guard let c = desktops.current else { return nil }
-        return parts[1] == "h" ? c - 1 : parts[1] == "l" ? c + 1 : nil
+        switch Command.direction(String(parts[1]), in: defs()) {
+        case .left: return c - 1
+        case .right: return c + 1
+        default: return nil
+        }
     }
 
     // No space typed yet: filter by trigger (exact, then prefix) or title. After a space: only the exact trigger.
@@ -272,7 +276,7 @@ struct PaletteView: View {
                 .frame(width: 24)
             Text(a?.title ?? d.id).font(.system(size: 15))
             Spacer()
-            Text(d.trigger + (a?.argHint.map { " ‹\($0)›" } ?? ""))
+            Text(d.trigger + (a?.argHint.map { " ‹\(Command.spell($0, model.defs()))›" } ?? ""))
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(.secondary)
         }

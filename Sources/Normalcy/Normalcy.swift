@@ -48,20 +48,28 @@ enum Command: Equatable {
         return defs.first { $0.enabled && $0.id == corner.rawValue }
     }
 
-    // A single key meaning left/right/top/bottom: an arrow, or that command's current trigger.
+    // A single key meaning left/right/top/bottom: an arrow, or that direction key.
+    // Works even when the half command itself is switched off.
     static func direction(_ key: String, in defs: [CommandDef]) -> Action? {
-        let directions: [Action] = [.left, .right, .top, .bottom]
         if let a = arrowAction(key) { return a }
-        return defs.first { $0.enabled && $0.trigger == key }
-            .flatMap { Action(rawValue: $0.id) }
-            .flatMap { directions.contains($0) ? $0 : nil }
+        return Action.directions.first { a in defs.first { $0.id == a.rawValue }?.trigger == key }
     }
 
-    static func desktopKey(_ arg: String) -> CGKeyCode? {
-        if arg == "h" || arg == "←" { return 123 }
-        if arg == "l" || arg == "→" { return 124 }
+    static func desktopKey(_ arg: String, _ defs: [CommandDef]) -> CGKeyCode? {
+        switch direction(arg, in: defs) {
+        case .left: return 123
+        case .right: return 124
+        default: break
+        }
         if let n = Int(arg), (1...9).contains(n) { return digitKeys[n - 1] }
         return nil
+    }
+
+    // Fills <left> <right> <up> <down> in help text with the current direction keys.
+    static func spell(_ s: String, _ defs: [CommandDef]) -> String {
+        zip(["<left>", "<down>", "<up>", "<right>"], Action.directions).reduce(s) { s, p in
+            s.replacingOccurrences(of: p.0, with: defs.first { $0.id == p.1.rawValue }?.trigger ?? "")
+        }
     }
 
     static func parse(_ input: String, _ defs: [CommandDef]) -> Command? {
@@ -74,8 +82,8 @@ enum Command: Equatable {
         switch action {
         case .open: return arg.isEmpty ? nil : .open(arg)
         case .focus: return arg.isEmpty ? nil : .focus(arg)
-        case .desktop: return desktopKey(arg).map { .ctrlKey($0) }
-        case .move: return desktopKey(arg).map { .moveToDesktop($0) }
+        case .desktop: return desktopKey(arg, defs).map { .ctrlKey($0) }
+        case .move: return desktopKey(arg, defs).map { .moveToDesktop($0) }
         case .left, .right, .top, .bottom, .full, .center, .leftThird, .centerThird, .rightThird,
              .topLeft, .topRight, .bottomLeft, .bottomRight:
             return layoutRect(action).map { .layout($0) }
@@ -602,6 +610,18 @@ enum Main {
         precondition(t.text == "←↑" && t.layoutPreview == CGRect(x: 0, y: 0, width: 0.5, height: 0.5))
         t.text = "kh"
         precondition(t.matches.first?.id == "topLeft")
+        // Direction keys: changing them renames every trigger built from them, all at once.
+        let ijkl = CommandDef.setDirections(Array("jkil").map(String.init), in: d)
+        func trig(_ a: Action, _ defs: [CommandDef]) -> String { defs.first { $0.id == a.rawValue }!.trigger }
+        precondition(trig(.left, ijkl) == "j" && trig(.bottom, ijkl) == "k" && trig(.top, ijkl) == "i")
+        precondition(trig(.leftThird, ijkl) == "j3" && trig(.bottomLeft, ijkl) == "jk" && trig(.topRight, ijkl) == "li")
+        precondition(trig(.centerThird, ijkl) == "c3")
+        precondition(Command.parse("d j", ijkl) == .ctrlKey(123) && Command.parse("d h", ijkl) == nil)
+        precondition(Command.parse("ij", ijkl) == Command.parse("hk", d))
+        precondition(Command.spell("<left> <right>", ijkl) == "j l")
+        var off = d
+        off[off.firstIndex { $0.id == "left" }!].enabled = false
+        precondition(Command.parse("d h", off) == .ctrlKey(123)) // direction key works with Left Half off
         // Every default trigger is unique.
         precondition(Set(d.map(\.trigger)).count == d.count)
         print("selftest ok")

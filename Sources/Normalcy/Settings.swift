@@ -5,6 +5,9 @@ enum Action: String, CaseIterable {
     case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
     case settings
 
+    // Left, down, up, right: the direction keys are these commands' triggers.
+    static let directions: [Action] = [.left, .bottom, .top, .right]
+
     var defaultTrigger: String {
         switch self {
         case .open: "o"
@@ -94,8 +97,8 @@ enum Action: String, CaseIterable {
     var argHint: String? {
         switch self {
         case .open, .focus: "app"
-        case .desktop, .move: "1-9 h l"
-        case .tab: "h l k j f c"
+        case .desktop, .move: "1-9 <left> <right>"
+        case .tab: "<left> <right> <up> <down> f c"
         default: nil
         }
     }
@@ -108,8 +111,8 @@ enum Action: String, CaseIterable {
         switch self {
         case .open: "<trigger> Safari"
         case .focus: "<trigger> saf — matches the start of the app name"
-        case .desktop, .move: "<trigger> 2, or <trigger> h / <trigger> l for left / right"
-        case .tab: "<trigger>, or <trigger> h to put the new window on the left"
+        case .desktop, .move: "<trigger> 2, or <trigger> <left> / <trigger> <right> for left / right"
+        case .tab: "<trigger>, or <trigger> <left> to put the new window on the left"
         default: nil
         }
     }
@@ -121,6 +124,25 @@ struct CommandDef: Codable, Identifiable, Equatable {
     var enabled = true
 
     static let defaults = Action.allCases.map { CommandDef(id: $0.rawValue, trigger: $0.defaultTrigger) }
+
+    // Sets the direction keys (left, down, up, right) and renames them inside the thirds and
+    // quarters triggers, all at once so swaps like h j k l -> j k i l don't collide.
+    static func setDirections(_ keys: [String], in defs: [CommandDef]) -> [CommandDef] {
+        let built: Set<Action> = [.leftThird, .centerThird, .rightThird, .topLeft, .topRight, .bottomLeft, .bottomRight]
+        var map: [Character: Character] = [:]
+        for (a, new) in zip(Action.directions, keys) {
+            if let old = defs.first(where: { $0.id == a.rawValue })?.trigger, old.count == 1, let n = new.first {
+                map[old.first!] = n
+            }
+        }
+        return defs.map { d in
+            var d = d
+            guard let a = Action(rawValue: d.id) else { return d }
+            if let i = Action.directions.firstIndex(of: a) { d.trigger = keys[i] }
+            else if built.contains(a) { d.trigger = String(d.trigger.map { map[$0] ?? $0 }) }
+            return d
+        }
+    }
 }
 
 enum Style: String, CaseIterable { case bar, minimal }
@@ -152,6 +174,16 @@ final class Store: ObservableObject {
             .flatMap { try? JSONDecoder().decode([CommandDef].self, from: $0) } ?? []
         // Merge so actions added in later versions show up with their defaults.
         defs = CommandDef.defaults.map { d in saved.first { $0.id == d.id } ?? d }
+    }
+
+    // One direction key as a text field binding; keeps the last typed character.
+    func directionKey(_ a: Action) -> Binding<String> {
+        Binding(get: { self.defs.first { $0.id == a.rawValue }?.trigger ?? "" }, set: { v in
+            guard let k = v.last.map(String.init), let i = Action.directions.firstIndex(of: a) else { return }
+            var keys = Action.directions.map { a in self.defs.first { $0.id == a.rawValue }?.trigger ?? "" }
+            keys[i] = k
+            self.defs = CommandDef.setDirections(keys, in: self.defs)
+        })
     }
 
     func problem(_ d: CommandDef) -> String? {
@@ -202,22 +234,56 @@ struct GeneralSettings: View {
 
 struct CommandSettings: View {
     @ObservedObject var store = Store.shared
+    // Direction keys in left, down, up, right order.
+    let presets = [("hjkl", "H J K L"), ("aswd", "W A S D"), ("jkil", "I J K L")]
 
     var body: some View {
+        let currentKeys = Action.directions.map { a in store.defs.first { $0.id == a.rawValue }?.trigger ?? "" }.joined()
+        let presetBinding = Binding(get: { currentKeys }, set: { (p: String) in
+            store.defs = CommandDef.setDirections(Array(p).map(String.init), in: store.defs)
+        })
         let groups = Action.allCases.map(\.group).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
         Form {
+            Section("Direction Keys") {
+                Picker("Preset", selection: presetBinding) {
+                    ForEach(presets, id: \.0) { Text($0.1).tag($0.0) }
+                    if !presets.contains(where: { $0.0 == currentKeys }) { Text("Custom").tag(currentKeys) }
+                }
+                LabeledContent {
+                    HStack(spacing: 10) {
+                        ForEach(Array(zip(Action.directions, ["←", "↓", "↑", "→"])), id: \.0) { a, arrow in
+                            HStack(spacing: 4) {
+                                Text(arrow).foregroundStyle(.secondary)
+                                TextField(a.title, text: store.directionKey(a))
+                                    .labelsHidden()
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.system(.body, design: .monospaced))
+                                    .multilineTextAlignment(.center)
+                                    .frame(width: 32)
+                            }
+                        }
+                    }
+                } label: {
+                    Text("Keys")
+                    Text("Halves, thirds, quarters, and the direction after d, m and t. Arrow keys always work.")
+                }
+            }
             ForEach(groups, id: \.self) { g in
                 Section(g) {
                     ForEach(store.defs.indices.filter { Action(rawValue: store.defs[$0].id)?.group == g }, id: \.self) { i in
-                        CommandRow(def: $store.defs[i], problem: store.problem(store.defs[i]))
+                        let a = Action(rawValue: store.defs[i].id)!
+                        CommandRow(def: $store.defs[i],
+                                   trigger: Action.directions.contains(a) ? store.directionKey(a) : $store.defs[i].trigger,
+                                   problem: store.problem(store.defs[i]))
                     }
                 }
             }
             Section {} footer: {
                 HStack(alignment: .top) {
-                    Text("The trigger is what you type. Switch a command off to hide it.\nArrow keys work like h j k l. Tab or Ctrl+N / Ctrl+P move through the list.")
+                    Text("The trigger is what you type. Switch a command off to hide it. Tab or Ctrl+N / Ctrl+P move through the list.")
                         .font(.caption).foregroundStyle(.secondary)
-                    Spacer()
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     Button("Reset to Defaults") { store.defs = CommandDef.defaults }
                 }
             }
@@ -228,6 +294,7 @@ struct CommandSettings: View {
 
 struct CommandRow: View {
     @Binding var def: CommandDef
+    @Binding var trigger: String // the def's trigger, or a direction key that renames others too
     let problem: String?
 
     var body: some View {
@@ -241,7 +308,7 @@ struct CommandRow: View {
                 Text(a?.title ?? def.id)
                     .foregroundStyle(def.enabled ? .primary : .secondary)
                 if let example = a?.example {
-                    Text(example.replacingOccurrences(of: "<trigger>", with: def.trigger.isEmpty ? "…" : def.trigger))
+                    Text(Command.spell(example.replacingOccurrences(of: "<trigger>", with: def.trigger.isEmpty ? "…" : def.trigger), Store.shared.defs))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -250,7 +317,7 @@ struct CommandRow: View {
                 }
             }
             Spacer()
-            TextField("Trigger", text: $def.trigger)
+            TextField("Trigger", text: $trigger)
                 .labelsHidden()
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))

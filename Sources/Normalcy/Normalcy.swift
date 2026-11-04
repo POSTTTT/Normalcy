@@ -167,6 +167,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let vc = NSHostingController(rootView: view)
             vc.sizingOptions = []
             vc.preferredContentSize = NSSize(width: 560, height: height) // the window resizes to this per tab
+            vc.title = title // shown as the window title, like Safari's Settings
             let item = NSTabViewItem(viewController: vc)
             item.label = title
             item.image = NSImage(systemSymbolName: icon, accessibilityDescription: title)
@@ -174,7 +175,18 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let w = NSWindow(contentViewController: tabs)
         w.toolbarStyle = .preference
-        w.titleVisibility = .hidden // the selected tab already names the page
+        // A plain bar in the window's color: the default one shows the page scrolling behind it.
+        w.titlebarAppearsTransparent = true
+        // That drops the line under the tabs; draw it back.
+        let line = NSBox()
+        line.boxType = .separator
+        line.translatesAutoresizingMaskIntoConstraints = false
+        tabs.view.addSubview(line)
+        NSLayoutConstraint.activate([
+            line.topAnchor.constraint(equalTo: tabs.view.safeAreaLayoutGuide.topAnchor),
+            line.leadingAnchor.constraint(equalTo: tabs.view.leadingAnchor),
+            line.trailingAnchor.constraint(equalTo: tabs.view.trailingAnchor),
+        ])
         w.styleMask.remove(.resizable)
         w.isReleasedWhenClosed = false
         return w

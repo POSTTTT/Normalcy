@@ -63,12 +63,15 @@ Open Settings from the ⌘ icon in the menu bar or with the `set` command.
 - **Position** (Minimal only): show the key caps at the top, center or bottom of the screen.
 - **Show spaces as ␣** (Minimal only): give each space its own key cap.
 
-**Commands**
+**Commands** and **Windows**
 
+- Each command shows its trigger as a key cap. **Click it to change it**, for example `o` to `open`. Triggers can't be empty, contain spaces, or repeat another visible command's trigger.
 - **Switch a command off** to hide it. A hidden command does nothing when typed.
-- **Change its trigger**, for example `o` to `open`. Triggers can't be empty, contain spaces, or repeat another visible command's trigger.
+- **Windows** also sets the direction keys (H J K L, W A S D, I J K L or your own) and the resize steps.
 
-Changes save immediately. **Reset to Defaults** restores the original triggers.
+**Keys** lists the fixed keys in the command bar.
+
+Changes save immediately. **Reset These** restores the original triggers on that page.
 
 ## Setup
 

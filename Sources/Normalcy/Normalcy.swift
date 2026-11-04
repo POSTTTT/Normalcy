@@ -160,8 +160,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
         let pages: [(String, String, AnyView, CGFloat)] = [
-            ("General", "gearshape", AnyView(GeneralSettings()), 580),
+            ("General", "gearshape", AnyView(GeneralSettings()), 460),
             ("Commands", "command", AnyView(CommandSettings()), 680),
+            ("Windows", "macwindow", AnyView(WindowSettings()), 680),
+            ("Keys", "keyboard", AnyView(KeySettings()), 450),
         ]
         for (title, icon, view, height) in pages {
             let vc = NSHostingController(rootView: view)

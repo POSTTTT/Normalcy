@@ -298,116 +298,165 @@ struct GeneralSettings: View {
 
     var body: some View {
         Form {
-            Section("Activation") {
-                LabeledContent("Shortcut") { ShortcutRecorder() }
+            Section {
+                LabeledContent("Open the command bar") { ShortcutRecorder() }
                 if store.hotKeyTaken {
                     Text("Another app already uses this shortcut. Pick a different one.")
                         .font(.caption).foregroundStyle(.red)
                 }
+            } header: {
+                Text("Shortcut")
+            } footer: {
+                Text("Works from any app. Click the shortcut, then press the new one.")
+                    .settingsFooter()
             }
             Section {
                 Picker("Style", selection: $store.style) {
                     Text("Command bar").tag(Style.bar)
                     Text("Minimal").tag(Style.minimal)
                 }
-                Toggle("Show command list", isOn: $store.showList)
-                Picker("List layout", selection: $store.listStyle) {
-                    Text("Rows + layout grid").tag(ListStyle.grid)
-                    Text("Grouped, scrolling").tag(ListStyle.grouped)
-                }
-                .disabled(!store.showList)
-            } header: {
-                Text("Appearance")
-            } footer: {
-                Text("Minimal hides the text field and shows what you type as key caps.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Minimal style") {
-                Picker("Position", selection: $store.position) {
-                    ForEach(Position.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
-                }
                 .pickerStyle(.segmented)
-                Toggle("Show spaces as ␣", isOn: $store.showSpaces)
-            }
-            .disabled(store.style == .bar)
-            Section {
-                Stepper(value: $store.growPercent, in: 1...50) {
-                    LabeledContent("Bigger / smaller step", value: "\(store.growPercent)%")
+                if store.style == .minimal {
+                    Picker("Position on screen", selection: $store.position) {
+                        ForEach(Position.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
+                    }
+                    Toggle("Show each space as its own key", isOn: $store.showSpaces)
                 }
-                Stepper(value: $store.edgePercent, in: 1...25) {
-                    LabeledContent("Resize by direction step", value: "\(store.edgePercent)% of screen")
+                Toggle("Show the command list", isOn: $store.showList)
+                if store.showList {
+                    Picker("List layout", selection: $store.listStyle) {
+                        Text("Rows with a layout grid").tag(ListStyle.grid)
+                        Text("Grouped, scrolling").tag(ListStyle.grouped)
+                    }
                 }
-                Toggle("Resize windows next to it too", isOn: $store.resizeNeighbors)
             } header: {
-                Text("Resize")
+                Text("Command Bar")
             } footer: {
-                Text("How much + and - change the window, and how far each direction key moves an edge after re. With windows side by side, the one next to it gives up or takes the space.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(store.style == .bar
+                     ? "Command bar shows a text field with the list under it."
+                     : "Minimal hides the text field and shows what you type as key caps.")
+                    .settingsFooter()
             }
         }
         .formStyle(.grouped)
     }
 }
 
+// Commands that aren't about window position or size.
 struct CommandSettings: View {
+    var body: some View {
+        CommandGroups(groups: ["Apps", "Desktops & Tabs", "Scroll", "Other"],
+                      note: "The key cap is what you type. Click it to change it; switch a command off to hide it.")
+    }
+}
+
+struct WindowSettings: View {
     @ObservedObject var store = Store.shared
     // Direction keys in left, down, up, right order.
     let presets = [("hjkl", "H J K L"), ("aswd", "W A S D"), ("jkil", "I J K L")]
-    // Fixed keys, listed so they can be found. Keep in sync with PaletteView.field's key handling.
-    let barKeys = [
-        ("Enter", "Run the command"),
-        ("⇧ Enter", "Run it and keep the bar open"),
-        ("Tab  ⇧ Tab", "Move through the list"),
-        ("⌃N  ⌃P", "Move through the list"),
-        ("← ↓ ↑ →", "Same as the direction keys"),
-        ("Esc", "Clear what you typed; close when empty"),
-        ("⌃U", "Clear what you typed"),
-        ("⌃W", "Delete the last word"),
-    ]
 
     var body: some View {
         let currentKeys = Action.directions.map { a in store.defs.first { $0.id == a.rawValue }?.trigger ?? "" }.joined()
         let presetBinding = Binding(get: { currentKeys }, set: { (p: String) in
             store.defs = CommandDef.setDirections(Array(p).map(String.init), in: store.defs)
         })
-        let groups = Action.allCases.map(\.group).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
-        Form {
-            Section("Keys in the Bar") {
-                ForEach(barKeys, id: \.0) { keys, what in
-                    LabeledContent(what) {
-                        Text(keys).font(.system(.body, design: .monospaced)).foregroundStyle(.secondary)
-                    }
-                }
-            }
+        CommandGroups(groups: ["Halves", "Thirds", "Quarters", "Fill & Center", "Resize"],
+                      note: "Thirds and quarters are built from the direction keys, so changing those renames them too.") {
             Section {
                 Picker("Preset", selection: presetBinding) {
                     ForEach(presets, id: \.0) { Text($0.1).tag($0.0) }
                     if !presets.contains(where: { $0.0 == currentKeys }) { Text("Custom").tag(currentKeys) }
                 }
-                LabeledContent {
-                    HStack(spacing: 10) {
-                        ForEach(Array(zip(Action.directions, ["←", "↓", "↑", "→"])), id: \.0) { a, arrow in
-                            HStack(spacing: 4) {
-                                Text(arrow).foregroundStyle(.secondary)
-                                TextField(a.title, text: store.directionKey(a))
-                                    .labelsHidden()
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.system(.body, design: .monospaced))
-                                    .multilineTextAlignment(.center)
-                                    .frame(width: 32)
-                            }
+                LabeledContent("Left, down, up, right") {
+                    HStack(spacing: 6) {
+                        ForEach(Action.directions, id: \.self) { a in
+                            KeyCapField(text: store.directionKey(a), label: a.title)
                         }
                     }
-                } label: {
-                    Text("Keys")
                 }
             } header: {
                 Text("Direction Keys")
             } footer: {
-                Text("Halves, thirds, quarters, and the direction after d, m, t and re. Arrow keys always work.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("Used for halves, thirds and quarters, and after d, m, t, re and s. Arrow keys always work too.")
+                    .settingsFooter()
             }
+        } after: {
+            Section {
+                Stepper(value: $store.growPercent, in: 1...50) {
+                    LabeledContent("Bigger or smaller (+ −)", value: "\(store.growPercent)%")
+                }
+                Stepper(value: $store.edgePercent, in: 1...25) {
+                    LabeledContent("Each direction key after re", value: "\(store.edgePercent)% of screen")
+                }
+                Toggle("Resize the window next to it too", isOn: $store.resizeNeighbors)
+            } header: {
+                Text("Resize Steps")
+            } footer: {
+                Text("With two windows side by side, growing one shrinks the other.")
+                    .settingsFooter()
+            }
+        }
+    }
+}
+
+struct KeySettings: View {
+    // Fixed keys, listed so they can be found. Keep in sync with PaletteView.field's key handling.
+    // Each entry: the key combinations that do it (alternatives), and what they do.
+    let barKeys: [([[String]], String)] = [
+        ([["Return"]], "Run the command"),
+        ([["⇧", "Return"]], "Run it and keep the bar open"),
+        ([["Tab"], ["⌃", "N"]], "Next in the list"),
+        ([["⇧", "Tab"], ["⌃", "P"]], "Previous in the list"),
+        ([["←", "↓", "↑", "→"]], "Same as the direction keys"),
+        ([["Esc"]], "Clear what you typed, or close when empty"),
+        ([["⌃", "U"]], "Clear what you typed"),
+        ([["⌃", "W"]], "Delete the last word"),
+    ]
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(barKeys, id: \.1) { combos, what in
+                    LabeledContent(what) {
+                        HStack(spacing: 4) {
+                            ForEach(Array(combos.enumerated()), id: \.offset) { i, keys in
+                                if i > 0 { Text("or").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 4) }
+                                ForEach(keys, id: \.self) { KeyCap($0) }
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("In the Command Bar")
+            } footer: {
+                Text("These keys are fixed. Command triggers are set in Commands and Windows.")
+                    .settingsFooter()
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+// A page of command groups, with optional sections before and after, and a reset for just
+// these commands.
+struct CommandGroups<Before: View, After: View>: View {
+    @ObservedObject var store = Store.shared
+    let groups: [String]
+    let note: String
+    @ViewBuilder var before: Before
+    @ViewBuilder var after: After
+
+    init(groups: [String], note: String,
+         @ViewBuilder before: () -> Before = { EmptyView() }, @ViewBuilder after: () -> After = { EmptyView() }) {
+        self.groups = groups
+        self.note = note
+        self.before = before()
+        self.after = after()
+    }
+
+    var body: some View {
+        Form {
+            before
             ForEach(groups, id: \.self) { g in
                 Section(g) {
                     ForEach(store.defs.indices.filter { Action(rawValue: store.defs[$0].id)?.group == g }, id: \.self) { i in
@@ -418,13 +467,16 @@ struct CommandSettings: View {
                     }
                 }
             }
+            after
             Section {} footer: {
                 HStack(alignment: .top) {
-                    Text("The trigger is what you type. Switch a command off to hide it.")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
+                    Text(note)
+                        .settingsFooter()
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("Reset to Defaults") { store.defs = CommandDef.defaults }
+                    Button("Reset These") {
+                        let mine = Set(Action.allCases.filter { groups.contains($0.group) }.map(\.rawValue))
+                        store.defs = store.defs.map { d in mine.contains(d.id) ? CommandDef.defaults.first { $0.id == d.id }! : d }
+                    }
                 }
             }
         }
@@ -446,29 +498,76 @@ struct CommandRow: View {
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
                 Text(a?.title ?? def.id)
-                    .foregroundStyle(def.enabled ? .primary : .secondary)
                 if let example = a?.example {
                     Text(Command.spell(example.replacingOccurrences(of: "<trigger>", with: def.trigger.isEmpty ? "…" : def.trigger), Store.shared.defs))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if let problem {
-                    Text(problem).font(.caption).foregroundStyle(.red)
+                    Label(problem, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.red)
                 }
             }
-            Spacer()
-            TextField("Trigger", text: $trigger)
-                .labelsHidden()
-                .textFieldStyle(.roundedBorder)
-                .font(.system(.body, design: .monospaced))
-                .multilineTextAlignment(.center)
-                .frame(width: 64)
+            Spacer(minLength: 12)
+            KeyCapField(text: $trigger, label: "Trigger for \(a?.title ?? def.id)", invalid: problem != nil)
                 .disabled(!def.enabled)
-            Toggle("Show \(a?.title ?? def.id)", isOn: $def.enabled)
+            Toggle("Use \(a?.title ?? def.id)", isOn: $def.enabled)
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
         }
+        .opacity(def.enabled ? 1 : 0.55)
+    }
+}
+
+// A key drawn like a keyboard key, like the command bar's key caps.
+struct KeyCap: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12, weight: .medium, design: text.count == 1 ? .monospaced : .default))
+            .padding(.horizontal, 7)
+            .frame(minWidth: 26, minHeight: 22)
+            .keyCapBackground()
+    }
+}
+
+// An editable key cap: a trigger or a direction key.
+struct KeyCapField: View {
+    @Binding var text: String
+    let label: String
+    var invalid = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField(label, text: $text)
+            .labelsHidden()
+            .textFieldStyle(.plain)
+            .font(.system(size: 13, weight: .medium, design: .monospaced))
+            .multilineTextAlignment(.center)
+            .focused($focused)
+            .frame(width: max(30, CGFloat(text.count) * 9 + 16), height: 24)
+            .keyCapBackground(highlight: focused ? .accentColor : invalid ? .red : nil)
+            .help(label)
+    }
+}
+
+extension View {
+    func keyCapBackground(highlight: Color? = nil) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        // A lighter face over a darker bottom edge reads as a key.
+        return background(
+            shape.fill(Color.primary.opacity(0.12))
+                .background(shape.fill(Color.black.opacity(0.4)).offset(y: 1.5))
+        )
+        .overlay(shape.strokeBorder(highlight ?? Color.primary.opacity(0.15), lineWidth: highlight == nil ? 0.5 : 1.5))
+    }
+
+    func settingsFooter() -> some View {
+        font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 }
 

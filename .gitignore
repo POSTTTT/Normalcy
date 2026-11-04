@@ -1,3 +1,28 @@
+# Swift Package Manager
 .build/
 .swiftpm/
+Package.resolved
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+
+# Built app
+*.app
+*.dSYM/
+*.dSYM.zip
+
+# macOS
 .DS_Store
+._*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Tool working folders
+.impeccable/

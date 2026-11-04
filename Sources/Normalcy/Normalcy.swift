@@ -7,6 +7,7 @@ import SwiftUI
 //   b <app>        switch to running app      e.g. b saf
 //   d <1-9|h|l>    go to desktop N / left / right
 //   m <1-9|h|l>    move focused window to desktop N / left / right
+//   t              move current tab to a new window
 //   h l k j        window: left / right / top / bottom half
 //   f c            window: full / center
 //   set            open settings
@@ -15,6 +16,7 @@ enum Command: Equatable {
     case focus(String)
     case ctrlKey(CGKeyCode)
     case moveToDesktop(CGKeyCode)
+    case tabToWindow
     case layout(CGRect) // fractions of the screen, top-left origin
     case settings
 
@@ -45,6 +47,7 @@ enum Command: Equatable {
         case .bottom: return .layout(CGRect(x: 0, y: 0.5, width: 1, height: 0.5))
         case .full: return .layout(CGRect(x: 0, y: 0, width: 1, height: 1))
         case .center: return .layout(CGRect(x: 0.15, y: 0.1, width: 0.7, height: 0.8))
+        case .tab: return .tabToWindow
         case .settings: return .settings
         }
     }
@@ -177,6 +180,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             moveWindow(toDesktop: key)
         case .layout(let f):
             place(f)
+        case .tabToWindow:
+            // The bar took key focus from the app's window. Hand it back first, or Safari
+            // applies the command to a different tab than the one showing.
+            target?.activate()
+            if let w = focusedWindow() { AXUIElementPerformAction(w, kAXRaiseAction as CFString) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                if !self.pressMenuItem("Move Tab to New Window") { NSSound.beep() }
+            }
         case .settings:
             openSettings()
         }
@@ -262,6 +273,26 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return CGRect(origin: origin, size: size)
     }
 
+    // Apps with native macOS tabs (Ghostty, Safari, Finder, Terminal...) list this under the Window menu.
+    // Pressing it through Accessibility works no matter which menu or shortcut the app uses.
+    func pressMenuItem(_ title: String) -> Bool {
+        guard let app = target else { return false }
+        func attr<T>(_ e: AXUIElement, _ name: String) -> T? {
+            var v: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(e, name as CFString, &v) == .success else { return nil }
+            return v as? T
+        }
+        // Menu bar > menu bar item > menu > menu item: 3 levels down.
+        func find(_ e: AXUIElement, _ depth: Int) -> AXUIElement? {
+            if (attr(e, kAXTitleAttribute) as String?) == title { return e }
+            guard depth < 3, let kids: [AXUIElement] = attr(e, kAXChildrenAttribute) else { return nil }
+            return kids.lazy.compactMap { find($0, depth + 1) }.first
+        }
+        guard let bar: AXUIElement = attr(AXUIElementCreateApplication(app.processIdentifier), kAXMenuBarAttribute),
+              let item = find(bar, 0) else { return false }
+        return AXUIElementPerformAction(item, kAXPressAction as CFString) == .success
+    }
+
     func focusedWindow() -> AXUIElement? {
         guard let app = target else { return nil }
         var win: CFTypeRef?
@@ -308,6 +339,7 @@ enum Main {
         precondition(Command.parse("m", d) == nil)
         precondition(Command.parse("h", d) == .layout(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
         precondition(Command.parse("set", d) == .settings)
+        precondition(Command.parse("t", d) == .tabToWindow)
         precondition(Command.parse("o", d) == nil)
         precondition(Command.parse("", d) == nil)
         // Renamed trigger works, old one doesn't; hidden command doesn't run.

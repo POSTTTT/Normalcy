@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum Action: String, CaseIterable {
-    case open, focus, desktop, move, left, right, top, bottom, full, center, settings
+    case open, focus, desktop, move, tab, left, right, top, bottom, full, center, settings
 
     var defaultTrigger: String {
         switch self {
@@ -9,6 +9,7 @@ enum Action: String, CaseIterable {
         case .focus: "b"
         case .desktop: "d"
         case .move: "m"
+        case .tab: "t"
         case .left: "h"
         case .right: "l"
         case .top: "k"
@@ -25,6 +26,7 @@ enum Action: String, CaseIterable {
         case .focus: "Switch to App"
         case .desktop: "Go to Desktop"
         case .move: "Move Window to Desktop"
+        case .tab: "Move Tab to New Window"
         case .left: "Left Half"
         case .right: "Right Half"
         case .top: "Top Half"
@@ -41,6 +43,7 @@ enum Action: String, CaseIterable {
         case .focus: "macwindow.on.rectangle"
         case .desktop: "rectangle.3.group"
         case .move: "rectangle.portrait.and.arrow.right"
+        case .tab: "macwindow.badge.plus"
         case .left: "rectangle.lefthalf.filled"
         case .right: "rectangle.righthalf.filled"
         case .top: "rectangle.tophalf.filled"
@@ -66,6 +69,7 @@ enum Action: String, CaseIterable {
         case .focus: "Switch to running app — <trigger> saf"
         case .desktop: "Go to desktop — <trigger> 2 / h / l"
         case .move: "Move window to desktop — <trigger> 2 / h / l"
+        case .tab: "Move current tab to its own window"
         case .left: "Window: left half"
         case .right: "Window: right half"
         case .top: "Window: top half"

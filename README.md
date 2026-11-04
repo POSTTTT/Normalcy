@@ -13,7 +13,7 @@ A keyboard command bar for macOS, inspired by Neovim. Press a hotkey, type a sho
 swift run Normalcy
 ```
 
-Press **Option+Space** (change it in Settings > General) to open the command bar. **Enter** runs the command; **Shift+Enter** runs it and keeps the bar open for the next one; **Esc** closes the bar.
+Press **Option+Space** (change it in Settings > General) to open the command bar. **Enter** runs the command; **Shift+Enter** runs it and keeps the bar open for the next one; **Esc** clears what you typed, or closes the bar when nothing is typed. **Ctrl+U** clears everything and **Ctrl+W** the last word.
 
 ## Commands
 

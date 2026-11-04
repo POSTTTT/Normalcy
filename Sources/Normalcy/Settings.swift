@@ -384,7 +384,7 @@ struct CommandSettings: View {
             }
             Section {} footer: {
                 HStack(alignment: .top) {
-                    Text("The trigger is what you type. Switch a command off to hide it. Shift+Enter runs a command and keeps the bar open for the next. Tab or Ctrl+N / Ctrl+P move through the list.")
+                    Text("The trigger is what you type. Switch a command off to hide it. Shift+Enter runs a command and keeps the bar open for the next. Esc or Ctrl+U clears what you typed, Ctrl+W the last word. Tab or Ctrl+N / Ctrl+P move through the list.")
                         .font(.caption).foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)

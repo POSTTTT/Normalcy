@@ -116,6 +116,17 @@ final class Palette: ObservableObject {
         return out
     }
 
+    // Esc discards what's typed first; with nothing typed, it closes the bar.
+    func escape() { if text.isEmpty { cancel() } else { text = "" } }
+
+    // Ctrl+W: drop the last word, keeping the space before it, so "re ←↑→" becomes "re ".
+    func deleteWord() {
+        var t = text
+        while t.hasSuffix(" ") { t.removeLast() }
+        while let c = t.last, c != " " { t.removeLast() }
+        text = t
+    }
+
     func move(_ by: Int) {
         let n = matches.count
         if n > 0 { selected = (selected + by + n) % n }
@@ -199,7 +210,9 @@ struct PaletteView: View {
                 case "n" where press.modifiers.contains(.control): model.move(1)
                 case "p" where press.modifiers.contains(.control): model.move(-1)
                 case .return where press.modifiers.contains(.shift): model.enter(continuing: true)
-                case .escape: model.cancel()
+                case .escape: model.escape()
+                case "u" where press.modifiers.contains(.control): model.text = "" // discard, like a shell
+                case "w" where press.modifiers.contains(.control): model.deleteWord()
                 default: return .ignored
                 }
                 return .handled

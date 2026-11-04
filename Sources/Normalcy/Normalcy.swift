@@ -810,6 +810,20 @@ enum Main {
         precondition(App.center(CGSize(width: 400, height: 300), in: screen, bounds: screen) == CGPoint(x: 300, y: 275))
         precondition(App.center(CGSize(width: 400, height: 300), in: CGRect(x: 0, y: 25, width: 500, height: 800), bounds: screen) == CGPoint(x: 50, y: 275))
         precondition(App.center(CGSize(width: 600, height: 900), in: CGRect(x: 500, y: 25, width: 500, height: 800), bounds: screen) == CGPoint(x: 400, y: 25))
+        // Discarding input: Ctrl+W drops a word, Esc clears before it closes.
+        let e = Palette()
+        var closed = false
+        e.cancel = { closed = true }
+        e.text = "re ←↑→ "
+        e.deleteWord()
+        precondition(e.text == "re ")
+        e.deleteWord()
+        precondition(e.text == "")
+        e.text = "o Saf"
+        e.escape()
+        precondition(e.text == "" && !closed)
+        e.escape()
+        precondition(closed)
         // Every default trigger is unique.
         precondition(Set(d.map(\.trigger)).count == d.count)
         print("selftest ok")

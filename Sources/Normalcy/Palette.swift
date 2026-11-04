@@ -6,6 +6,7 @@ final class Palette: ObservableObject {
     @Published var focusToken = 0 // bumped on every show to refocus the field
     @Published var visible = false // drives the entrance; reset while hidden so each open animates
     var submit: (String) -> Void = { _ in }
+    var submitContinuing: (String) -> Void = { _ in } // runs, then reopens the bar for the next command
     var cancel: () -> Void = {}
     var defs: () -> [CommandDef] = { Store.shared.defs }
     @Published var desktops = Desktops()
@@ -114,11 +115,13 @@ final class Palette: ObservableObject {
 
     // Enter: with arguments typed, run the text as-is. Otherwise act on the selected row:
     // commands that need an argument get their trigger filled in, the rest run.
-    func enter() {
+    // Shift+Enter does the same but keeps going: the bar comes back for another command.
+    func enter(continuing: Bool = false) {
+        let run = continuing ? submitContinuing : submit
         let rows = matches
-        guard !text.contains(" "), rows.indices.contains(selected) else { return submit(text) }
+        guard !text.contains(" "), rows.indices.contains(selected) else { return run(text) }
         let d = rows[selected]
-        if Action(rawValue: d.id)?.argRequired == true { text = d.trigger + " " } else { submit(d.trigger) }
+        if Action(rawValue: d.id)?.argRequired == true { text = d.trigger + " " } else { run(d.trigger) }
     }
 }
 
@@ -187,6 +190,7 @@ struct PaletteView: View {
                 case KeyEquivalent("\u{19}"): model.move(-1) // Shift+Tab can arrive as backtab
                 case "n" where press.modifiers.contains(.control): model.move(1)
                 case "p" where press.modifiers.contains(.control): model.move(-1)
+                case .return where press.modifiers.contains(.shift): model.enter(continuing: true)
                 case .escape: model.cancel()
                 default: return .ignored
                 }

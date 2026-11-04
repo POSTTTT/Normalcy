@@ -218,6 +218,19 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.hide()
             if let cmd { self?.run(cmd) } else { NSSound.beep() }
         }
+        palette.submitContinuing = { [weak self] text in
+            guard let self, let cmd = Command.parse(text, Store.shared.defs) else { return NSSound.beep() }
+            self.hide()
+            self.run(cmd)
+            // Reopen once the command has landed: desktop switches slide for a while, the rest are quick.
+            // shortcut: fixed delays, not completion callbacks; lengthen if the bar comes back too early.
+            let wait: Double = switch cmd {
+            case .ctrlKey, .moveToDesktop: 0.7
+            case .tabToWindow, .open: 0.6
+            default: 0.2
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.show() }
+        }
         palette.cancel = { [weak self] in self?.hide() }
         panel.contentView = NSHostingView(rootView: PaletteView(model: palette))
         preview.contentView = NSHostingView(rootView: LayoutPreview(model: palette))
@@ -522,6 +535,11 @@ enum Main {
         p.text = "o Safari"
         p.enter()
         precondition(submitted == "o Safari")
+        var continued: String?
+        p.submitContinuing = { continued = $0 }
+        p.text = "h"
+        p.enter(continuing: true)
+        precondition(continued == "h")
 
         // Desktops: full-screen spaces (type 4) aren't numbered.
         let fake: [[String: Any]] = [[

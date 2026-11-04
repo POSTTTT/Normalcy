@@ -622,6 +622,19 @@ enum Main {
         var off = d
         off[off.firstIndex { $0.id == "left" }!].enabled = false
         precondition(Command.parse("d h", off) == .ctrlKey(123)) // direction key works with Left Half off
+        // The empty key cap names the argument once a command and a space are typed.
+        let h = Palette()
+        h.defs = { d }
+        h.text = "o "
+        precondition(h.argPlaceholder == "app")
+        h.text = "d"
+        precondition(h.argPlaceholder == nil)
+        h.text = "t  "
+        precondition(h.argPlaceholder == "position")
+        h.text = "d 2"
+        precondition(h.argPlaceholder == nil)
+        h.text = "h "
+        precondition(h.argPlaceholder == nil)
         // Every default trigger is unique.
         precondition(Set(d.map(\.trigger)).count == d.count)
         print("selftest ok")

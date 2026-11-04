@@ -103,6 +103,16 @@ enum Action: String, CaseIterable {
         }
     }
 
+    // What the argument is, shown in the empty key cap after the command and a space.
+    var argName: String? {
+        switch self {
+        case .open, .focus: "app"
+        case .desktop, .move: "number or direction"
+        case .tab: "position"
+        default: nil
+        }
+    }
+
     // Enter on the row fills in the trigger instead of running, so an argument can be typed.
     var argRequired: Bool { argHint != nil && self != .tab }
 

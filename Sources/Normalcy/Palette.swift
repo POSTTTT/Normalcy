@@ -76,6 +76,14 @@ final class Palette: ObservableObject {
         return out
     }
 
+    // Name of the argument the typed command expects, once the command and a space are in.
+    var argPlaceholder: String? {
+        let words = text.split(separator: " ")
+        guard words.count == 1, text.hasSuffix(" "),
+              let d = Command.lookup(String(words[0]), in: defs()) else { return nil }
+        return Action(rawValue: d.id)?.argName
+    }
+
     // Arrow keys type ← ↓ ↑ →, which work like h j k l. Right after a command that takes a
     // direction (t, d, m) they add the space too, so "t" + ← becomes "t ←".
     func typeArrow(_ letter: String) {
@@ -214,9 +222,11 @@ struct PaletteView: View {
     var keys: some View {
         let blocks = Palette.keyBlocks(model.text, showSpaces: store.showSpaces)
         return HStack(spacing: 8) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, word in
-                Text(Palette.spacedArrows(word))
-                    .font(.system(size: 22, weight: .medium, design: .monospaced))
+            ForEach(Array(blocks.enumerated()), id: \.offset) { i, word in
+                let hint = i == blocks.count - 1 ? model.argPlaceholder : nil
+                Text(hint.map { "‹\($0)›" } ?? Palette.spacedArrows(word))
+                    .font(hint == nil ? .system(size: 22, weight: .medium, design: .monospaced) : .system(size: 17))
+                    .foregroundStyle(hint == nil ? .primary : .secondary)
                     .padding(.horizontal, 14)
                     .frame(minWidth: 44, minHeight: 44)
                     .glass(RoundedRectangle(cornerRadius: 10, style: .continuous))

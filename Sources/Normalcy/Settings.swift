@@ -254,6 +254,9 @@ final class Store: ObservableObject {
     @Published var edgePercent = UserDefaults.standard.object(forKey: "edgePercent") as? Int ?? 5 {
         didSet { UserDefaults.standard.set(edgePercent, forKey: "edgePercent") }
     }
+    @Published var resizeNeighbors = UserDefaults.standard.object(forKey: "resizeNeighbors") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(resizeNeighbors, forKey: "resizeNeighbors") }
+    }
     var resizeSteps: ResizeSteps { ResizeSteps(scale: CGFloat(growPercent) / 100, edge: CGFloat(edgePercent) / 100) }
     @Published var recordingHotKey = false // the shortcut is paused while a new one is typed
     @Published var hotKeyTaken = false // registering failed: another app holds this shortcut
@@ -334,10 +337,11 @@ struct GeneralSettings: View {
                 Stepper(value: $store.edgePercent, in: 1...25) {
                     LabeledContent("Resize by direction step", value: "\(store.edgePercent)% of screen")
                 }
+                Toggle("Resize windows next to it too", isOn: $store.resizeNeighbors)
             } header: {
                 Text("Resize")
             } footer: {
-                Text("How much + and - change the window, and how far each direction key moves an edge after re.")
+                Text("How much + and - change the window, and how far each direction key moves an edge after re. With windows side by side, the one next to it gives up or takes the space.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

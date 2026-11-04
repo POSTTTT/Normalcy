@@ -32,7 +32,7 @@ Press **Option+Space** (change it in Settings > General) to open the command bar
 | `c` | Center the window |
 | `+` / `-` | Make the window 10% bigger / smaller (step set in Settings > General), staying centered (Shift+Enter to repeat) |
 | `s` then `j` / `k` / `h` / `l` | Scroll the window down / up / left / right a quarter window per key, as you press them (no Enter); Esc to stop |
-| `re l` / `re h` / `re j` / `re k` | Make the window wider / narrower / taller / shorter by 5% of the screen (step set in Settings > General); repeat the key for more steps (`re ll`), or Shift+Enter to keep `re ` ready |
+| `re l` / `re h` / `re j` / `re k` | Make the window wider / narrower / taller / shorter by 5% of the screen (step set in Settings > General); repeat the key for more steps (`re ll`), or Shift+Enter to keep `re ` ready. A window right next to it gives up or takes the space (turn off in Settings > General) |
 | `h3` / `c3` / `l3` | Move the window to the left / center / right third |
 | `hk` / `lk` | Move the window to the top-left / top-right quarter |
 | `hj` / `lj` | Move the window to the bottom-left / bottom-right quarter |

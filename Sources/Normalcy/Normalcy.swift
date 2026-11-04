@@ -590,24 +590,34 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    // Switches to the nearest window on this desktop in that direction from the front window.
-    func focusWindow(_ dir: Action) {
+    // Windows of regular apps showing on this desktop, front to back. Frames are global, top-left origin.
+    static func visibleWindows() -> [(pid: pid_t, frame: CGRect)] {
         let regular = Set(NSWorkspace.shared.runningApplications
             .filter { $0.activationPolicy == .regular && $0 != NSRunningApplication.current }.map(\.processIdentifier))
         let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
-        let wins: [(pid: pid_t, frame: CGRect)] = info.compactMap { w in
+        return info.compactMap { w in
             guard (w[kCGWindowLayer as String] as? Int) == 0,
                   let pid = w[kCGWindowOwnerPID as String] as? pid_t, regular.contains(pid),
                   let b = w[kCGWindowBounds as String] as? NSDictionary,
                   let f = CGRect(dictionaryRepresentation: b), f.width > 50, f.height > 50 else { return nil }
             return (pid, f)
         }
+    }
+
+    // The app's AX window with exactly this frame.
+    func axWindow(_ pid: pid_t, _ frame: CGRect) -> AXUIElement? {
+        let ax: [AXUIElement] = axAttr(AXUIElementCreateApplication(pid), kAXWindowsAttribute) ?? []
+        return ax.first { axFrame($0) == frame }
+    }
+
+    // Switches to the nearest window on this desktop in that direction from the front window.
+    func focusWindow(_ dir: Action) {
+        let wins = Self.visibleWindows()
         // The list is front to back, so the target app's first window is the one in front.
         guard let cur = wins.firstIndex(where: { $0.pid == target?.processIdentifier }),
               let i = Self.neighbor(of: wins[cur].frame, in: wins.map(\.frame), toward: dir, skip: cur),
               let app = NSRunningApplication(processIdentifier: wins[i].pid) else { return NSSound.beep() }
-        let ax: [AXUIElement] = axAttr(AXUIElementCreateApplication(app.processIdentifier), kAXWindowsAttribute) ?? []
-        if let w = ax.first(where: { axFrame($0) == wins[i].frame }) {
+        if let w = axWindow(wins[i].pid, wins[i].frame) {
             AXUIElementSetAttributeValue(w, kAXMainAttribute as CFString, kCFBooleanTrue)
             AXUIElementPerformAction(w, kAXRaiseAction as CFString)
         }
@@ -703,7 +713,35 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func resizeFocused(_ cmd: Command) {
         guard let w = focusedWindow(), let frame = axFrame(w), let bounds = Self.screenBounds(),
               let target = Self.resized(frame, cmd, bounds: bounds, steps: Store.shared.resizeSteps) else { return }
+        // Read the neighbors before the window moves, while their frames still line up.
+        let others = Store.shared.resizeNeighbors ? Self.visibleWindows().filter { $0.frame != frame } : []
         setFrame(w, target, bounds: bounds)
+        guard let now = axFrame(w) else { return }
+        for (i, f) in Self.neighborsResized(old: frame, new: now, others: others.map(\.frame)) {
+            if let n = axWindow(others[i].pid, others[i].frame) { setFrame(n, f, bounds: bounds) }
+        }
+    }
+
+    // Windows beside an edge that moved follow it, keeping their gap: growing the left window
+    // of a side-by-side pair shrinks the right one. Returns new frames by index into `others`.
+    // A window counts as beside an edge when it's within 20 points and overlaps along it.
+    static func neighborsResized(old: CGRect, new: CGRect, others: [CGRect]) -> [Int: CGRect] {
+        let tol: CGFloat = 20
+        var out: [Int: CGRect] = [:]
+        for (i, o) in others.enumerated() {
+            var minX = o.minX, maxX = o.maxX, minY = o.minY, maxY = o.maxY
+            if o.maxY > old.minY + tol, o.minY < old.maxY - tol { // side by side
+                if abs(o.minX - old.maxX) < tol { minX += new.maxX - old.maxX }
+                if abs(o.maxX - old.minX) < tol { maxX += new.minX - old.minX }
+            }
+            if o.maxX > old.minX + tol, o.minX < old.maxX - tol { // stacked
+                if abs(o.minY - old.maxY) < tol { minY += new.maxY - old.maxY }
+                if abs(o.maxY - old.minY) < tol { maxY += new.minY - old.minY }
+            }
+            let f = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+            if f != o, f.width >= 100, f.height >= 100 { out[i] = f }
+        }
+        return out
     }
 
     // Where a resize command puts a window, kept within the screen. Steps are from Settings:
@@ -779,6 +817,9 @@ enum Main {
         precondition(App.neighbor(of: tiles[1], in: tiles, toward: .bottom, skip: 1) == 2)
         precondition(App.neighbor(of: tiles[1], in: tiles, toward: .left, skip: 1) == 0)
         precondition(App.neighbor(of: tiles[0], in: tiles, toward: .top, skip: 0) == nil)
+        let leftHalf = CGRect(x: 0, y: 0, width: 500, height: 800), rightHalf = CGRect(x: 510, y: 0, width: 490, height: 800)
+        precondition(App.neighborsResized(old: leftHalf, new: CGRect(x: 0, y: 0, width: 600, height: 800), others: [rightHalf, tiles[0]])
+                     == [0: CGRect(x: 610, y: 0, width: 390, height: 800)])
         precondition(Command.parse("d 2", d) == .ctrlKey(19))
         precondition(Command.parse("d l", d) == .ctrlKey(124))
         precondition(Command.parse("d 0", d) == nil)

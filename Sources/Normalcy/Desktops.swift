@@ -135,4 +135,30 @@ enum Snapshot {
             return true
         }
     }
+
+    // The app's front window: one showing on this desktop if any, else its largest elsewhere.
+    // Needs Screen Recording permission; nil without it or when the app has no window.
+    // shortcut: an app's kept-around closed windows can be picked when nothing is on screen.
+    @MainActor
+    static func appWindow(_ pid: pid_t) async -> NSImage? {
+        guard CGPreflightScreenCaptureAccess(),
+              let content = try? await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false) else { return nil }
+        let windows = content.windows.filter {
+            $0.owningApplication?.processID == pid && $0.windowLayer == 0 && $0.frame.width > 100 && $0.frame.height > 100
+        }
+        // The window list from CoreGraphics is in front-to-back order, so its first match is the front window.
+        let onScreen = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        let frontID = onScreen.first {
+            ($0[kCGWindowOwnerPID as String] as? pid_t) == pid && ($0[kCGWindowLayer as String] as? Int) == 0
+        }?[kCGWindowNumber as String] as? CGWindowID
+        guard let w = windows.first(where: { $0.windowID == frontID })
+                ?? windows.max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }) else { return nil }
+        let c = SCStreamConfiguration()
+        c.width = 640
+        c.height = max(Int(640 * w.frame.height / w.frame.width), 1)
+        c.showsCursor = false
+        guard let cg = try? await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: w), configuration: c)
+        else { return nil }
+        return NSImage(cgImage: cg, size: .zero)
+    }
 }

@@ -284,6 +284,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         palette.cancel = { [weak self] in self?.hide() }
         palette.live = { [weak self] in self?.run($0) }
+        palette.loadPreview = { [weak self] pid in
+            Task { @MainActor in
+                if let img = await Snapshot.appWindow(pid) { self?.palette.appPreviews[pid] = img }
+            }
+        }
         panel.contentView = NSHostingView(rootView: PaletteView(model: palette))
         preview.contentView = NSHostingView(rootView: LayoutPreview(model: palette))
         preview.isOpaque = false
@@ -326,6 +331,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func show() {
         target = NSWorkspace.shared.frontmostApplication
         captureWindow()
+        palette.apps = runningApps()
         palette.text = ""
         palette.desktops = Desktops.read()
         loadWallpaper()
@@ -354,6 +360,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowDidResignKey(_ n: Notification) { if !continuing { hide() } }
 
     // Back to typing after a Shift+Enter command, against whatever app is now in front.
+    func runningApps() -> [RunningApp] {
+        NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular && $0 != NSRunningApplication.current }
+            .map { RunningApp(name: $0.localizedName ?? "", icon: $0.icon, pid: $0.processIdentifier) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
     // The target window's frame, so resize commands can preview where it will go.
     func captureWindow() {
         palette.window = focusedWindow().flatMap(axFrame)
@@ -365,6 +378,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard panel.isVisible else { return }
         target = NSWorkspace.shared.frontmostApplication
         captureWindow()
+        palette.apps = runningApps()
         palette.desktops = Desktops.read()
         snapshotDesktop() // the command may have changed this desktop
         panel.makeKeyAndOrderFront(nil)
@@ -376,9 +390,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .open(let name):
             _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/open"), arguments: ["-a", name])
         case .focus(let q):
-            NSWorkspace.shared.runningApplications.first {
-                $0.activationPolicy == .regular && ($0.localizedName ?? "").lowercased().hasPrefix(q.lowercased())
-            }?.activate()
+            // An exact name wins, so picking "Safari" from the list never lands on "Safari Technology Preview".
+            let apps = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
+            let name = { (a: NSRunningApplication) in (a.localizedName ?? "").lowercased() }
+            (apps.first { name($0) == q.lowercased() } ?? apps.first { name($0).hasPrefix(q.lowercased()) })?.activate()
         case .ctrlKey(let key):
             // Let the window server drop the hidden bar before the desktop slides.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -883,6 +898,21 @@ enum Main {
         var left: CGFloat = -263, frames = 0
         while App.scrollPart(left) != 0 { left -= CGFloat(App.scrollPart(left)); frames += 1 }
         precondition(abs(left) < 1 && frames < 40)
+        // "b " lists running apps, filtered by what's typed; Enter switches to the highlighted one.
+        let ap = Palette()
+        ap.defs = { d }
+        ap.apps = ["Discord", "Safari", "Safari Technology Preview", "Slack"].map { RunningApp(name: $0) }
+        var picked: String?
+        ap.submit = { picked = $0 }
+        ap.text = "b "
+        precondition(ap.appMatches?.count == 4)
+        ap.text = "b saf"
+        precondition(ap.appMatches?.map(\.name) == ["Safari", "Safari Technology Preview"])
+        ap.move(1)
+        ap.enter()
+        precondition(picked == "b Safari Technology Preview")
+        ap.text = "o saf"
+        precondition(ap.appMatches == nil) // only after the switch command
         // Discarding input: Ctrl+W drops a word, Esc clears before it closes.
         let e = Palette()
         var closed = false

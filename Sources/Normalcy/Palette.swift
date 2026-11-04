@@ -1,8 +1,17 @@
 import SwiftUI
 
+struct RunningApp: Equatable {
+    var name: String
+    var icon: NSImage?
+    var pid: pid_t = 0
+}
+
 final class Palette: ObservableObject {
     @Published var text = "" { didSet { selected = 0 } }
-    var live: (Command) -> Void = { _ in } // runs a command right away, bar staying open
+    var live: (Command) -> Void = { _ in }
+    @Published var apps: [RunningApp] = [] // running apps, by name; refreshed when the bar opens
+    @Published var appPreviews: [pid_t: NSImage] = [:] // pid -> picture of its front window
+    var loadPreview: (pid_t) -> Void = { _ in } // runs a command right away, bar staying open
     @Published var selected = 0
     @Published var focusToken = 0 // bumped on every show to refocus the field
     @Published var visible = false // drives the entrance; reset while hidden so each open animates
@@ -140,8 +149,18 @@ final class Palette: ObservableObject {
         text = t
     }
 
+    // After the switch command and a space ("b saf"): running apps whose name starts with what's typed.
+    // shortcut: shows the first 8; scroll if more ever need to fit.
+    var appMatches: [RunningApp]? {
+        let s = text.drop { $0 == " " }
+        guard let sp = s.firstIndex(of: " "),
+              Command.lookup(String(s[..<sp]), in: defs())?.id == Action.focus.rawValue else { return nil }
+        let q = s[s.index(after: sp)...].trimmingCharacters(in: .whitespaces).lowercased()
+        return Array(apps.filter { q.isEmpty || $0.name.lowercased().hasPrefix(q) }.prefix(8))
+    }
+
     func move(_ by: Int) {
-        let n = matches.count
+        let n = appMatches?.count ?? matches.count
         if n > 0 { selected = (selected + by + n) % n }
     }
 
@@ -150,6 +169,10 @@ final class Palette: ObservableObject {
     // Shift+Enter does the same but keeps going: the bar comes back for another command.
     func enter(continuing: Bool = false) {
         let run = continuing ? submitContinuing : submit
+        // Picking from the app list switches to the highlighted app.
+        if let list = appMatches, list.indices.contains(selected), let head = text.split(separator: " ").first {
+            return run(head + " " + list[selected].name)
+        }
         let rows = matches
         guard !text.contains(" "), rows.indices.contains(selected) else { return run(text) }
         let d = rows[selected]
@@ -240,7 +263,24 @@ struct PaletteView: View {
             desktopStrip(cmd)
                 .transition(.opacity.combined(with: .scale(scale: 0.97)))
         }
-        if store.showList, !rows.isEmpty {
+        if let apps = model.appMatches {
+            if apps.indices.contains(model.selected) {
+                appPreview(apps[model.selected])
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+            }
+            if !apps.isEmpty {
+                VStack(spacing: 2) {
+                    ForEach(Array(apps.enumerated()), id: \.element.name) { i, app in
+                        appRow(app, selected: i == model.selected)
+                            .onTapGesture { model.selected = i; model.enter() }
+                    }
+                }
+                .padding(8)
+                .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .animation(motion(0.18) ?? .linear(duration: 0.1), value: apps.map(\.name))
+                .animation(motion(0.15), value: model.selected)
+            }
+        } else if store.showList, !rows.isEmpty {
             list(rows)
             .padding(8)
             .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
@@ -368,6 +408,45 @@ struct PaletteView: View {
                 }
             }
         }
+    }
+
+    // The highlighted app's front window, captured when it's highlighted; its icon until then
+    // (or when it has no window, or Screen Recording isn't allowed).
+    func appPreview(_ app: RunningApp) -> some View {
+        Group {
+            if let img = model.appPreviews[app.pid] {
+                Image(nsImage: img).resizable().aspectRatio(contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+            } else if let icon = app.icon {
+                Image(nsImage: icon).resizable().frame(width: 96, height: 96)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 220)
+        .padding(14)
+        .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .task(id: app.pid) { model.loadPreview(app.pid) }
+    }
+
+    func appRow(_ app: RunningApp, selected: Bool) -> some View {
+        HStack(spacing: 14) {
+            if let icon = app.icon {
+                Image(nsImage: icon).resizable().frame(width: 26, height: 26)
+            }
+            Text(app.name).font(.system(size: 15))
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 40)
+        .background {
+            if selected {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.primary.opacity(0.1))
+                    .matchedGeometryEffect(id: "selection", in: selection)
+            }
+        }
+        .contentShape(Rectangle())
     }
 
     func tappableRow(_ i: Int, _ d: CommandDef, height: CGFloat) -> some View {

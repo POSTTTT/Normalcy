@@ -53,7 +53,7 @@ final class Palette: ObservableObject {
         let rows = matches
         guard !text.contains(" "), rows.indices.contains(selected) else { return submit(text) }
         let d = rows[selected]
-        if Action(rawValue: d.id)?.argHint != nil { text = d.trigger + " " } else { submit(d.trigger) }
+        if Action(rawValue: d.id)?.argRequired == true { text = d.trigger + " " } else { submit(d.trigger) }
     }
 }
 

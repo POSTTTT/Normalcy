@@ -7,7 +7,7 @@ import SwiftUI
 //   b <app>        switch to running app      e.g. b saf
 //   d <1-9|h|l>    go to desktop N / left / right
 //   m <1-9|h|l>    move focused window to desktop N / left / right
-//   t              move current tab to a new window
+//   t [h|l|k|j|f|c]   move current tab to a new window, optionally placed with a layout
 //   h l k j        window: left / right / top / bottom half
 //   f c            window: full / center
 //   set            open settings
@@ -16,7 +16,7 @@ enum Command: Equatable {
     case focus(String)
     case ctrlKey(CGKeyCode)
     case moveToDesktop(CGKeyCode)
-    case tabToWindow
+    case tabToWindow(CGRect?) // optional layout for the new window
     case layout(CGRect) // fractions of the screen, top-left origin
     case settings
 
@@ -41,14 +41,26 @@ enum Command: Equatable {
         case .focus: return arg.isEmpty ? nil : .focus(arg)
         case .desktop: return desktopKey(arg).map { .ctrlKey($0) }
         case .move: return desktopKey(arg).map { .moveToDesktop($0) }
-        case .left: return .layout(CGRect(x: 0, y: 0, width: 0.5, height: 1))
-        case .right: return .layout(CGRect(x: 0.5, y: 0, width: 0.5, height: 1))
-        case .top: return .layout(CGRect(x: 0, y: 0, width: 1, height: 0.5))
-        case .bottom: return .layout(CGRect(x: 0, y: 0.5, width: 1, height: 0.5))
-        case .full: return .layout(CGRect(x: 0, y: 0, width: 1, height: 1))
-        case .center: return .layout(CGRect(x: 0.15, y: 0.1, width: 0.7, height: 0.8))
-        case .tab: return .tabToWindow
+        case .left, .right, .top, .bottom, .full, .center: return layoutRect(action).map { .layout($0) }
+        case .tab:
+            if arg.isEmpty { return .tabToWindow(nil) }
+            // Argument is a window-layout trigger, e.g. "t h" = new window on the left half.
+            guard let d = defs.first(where: { $0.enabled && $0.trigger == arg }),
+                  let rect = Action(rawValue: d.id).flatMap(layoutRect) else { return nil }
+            return .tabToWindow(rect)
         case .settings: return .settings
+        }
+    }
+
+    static func layoutRect(_ a: Action) -> CGRect? {
+        switch a {
+        case .left: CGRect(x: 0, y: 0, width: 0.5, height: 1)
+        case .right: CGRect(x: 0.5, y: 0, width: 0.5, height: 1)
+        case .top: CGRect(x: 0, y: 0, width: 1, height: 0.5)
+        case .bottom: CGRect(x: 0, y: 0.5, width: 1, height: 0.5)
+        case .full: CGRect(x: 0, y: 0, width: 1, height: 1)
+        case .center: CGRect(x: 0.15, y: 0.1, width: 0.7, height: 0.8)
+        default: nil
         }
     }
 }
@@ -180,13 +192,16 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             moveWindow(toDesktop: key)
         case .layout(let f):
             place(f)
-        case .tabToWindow:
+        case .tabToWindow(let layout):
             // The bar took key focus from the app's window. Hand it back first, or Safari
             // applies the command to a different tab than the one showing.
             target?.activate()
             if let w = focusedWindow() { AXUIElementPerformAction(w, kAXRaiseAction as CFString) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                if !self.pressMenuItem("Move Tab to New Window") { NSSound.beep() }
+                guard self.pressMenuItem("Move Tab to New Window") else { return NSSound.beep() }
+                guard let layout else { return }
+                // The new window becomes the focused one once it has opened.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self.place(layout) }
             }
         case .settings:
             openSettings()
@@ -339,7 +354,11 @@ enum Main {
         precondition(Command.parse("m", d) == nil)
         precondition(Command.parse("h", d) == .layout(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
         precondition(Command.parse("set", d) == .settings)
-        precondition(Command.parse("t", d) == .tabToWindow)
+        precondition(Command.parse("t", d) == .tabToWindow(nil))
+        precondition(Command.parse("t h", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
+        precondition(Command.parse("t f", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 1, height: 1)))
+        precondition(Command.parse("t x", d) == nil)
+        precondition(Command.parse("t o", d) == nil) // only layout triggers allowed
         precondition(Command.parse("o", d) == nil)
         precondition(Command.parse("", d) == nil)
         // Renamed trigger works, old one doesn't; hidden command doesn't run.

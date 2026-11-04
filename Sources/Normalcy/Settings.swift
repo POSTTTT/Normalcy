@@ -59,9 +59,13 @@ enum Action: String, CaseIterable {
         switch self {
         case .open, .focus: "app"
         case .desktop, .move: "1-9 h l"
+        case .tab: "h l k j f c"
         default: nil
         }
     }
+
+    // Enter on the row fills in the trigger instead of running, so an argument can be typed.
+    var argRequired: Bool { argHint != nil && self != .tab }
 
     var help: String {
         switch self {
@@ -69,7 +73,7 @@ enum Action: String, CaseIterable {
         case .focus: "Switch to running app — <trigger> saf"
         case .desktop: "Go to desktop — <trigger> 2 / h / l"
         case .move: "Move window to desktop — <trigger> 2 / h / l"
-        case .tab: "Move current tab to its own window"
+        case .tab: "Move tab to new window — <trigger>, or <trigger> h to place it left"
         case .left: "Window: left half"
         case .right: "Window: right half"
         case .top: "Window: top half"

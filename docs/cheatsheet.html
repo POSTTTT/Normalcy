@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Normalcy Cheatsheet</title>
+<style>
+  :root {
+    --paper: #f6f6f4;
+    --ink: #1c1d21;
+    --muted: #6a6c73;
+    --rule: #dcdcd8;
+    --tile: #2a2c33;
+    --cap-face: #ffffff;
+    --cap-edge: #a9aab0;
+    --accent: #3d82f6;
+    --screen: #e4e5e9;
+  }
+  @page { size: A4 landscape; margin: 0; }
+  * { box-sizing: border-box; margin: 0; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font: 12.5px/1.4 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  }
+  .sheet {
+    width: 297mm; min-height: 210mm; margin: 0 auto;
+    padding: 12mm 13mm 10mm;
+    display: grid; grid-template-rows: auto 1fr auto; gap: 8mm;
+  }
+  header { display: flex; align-items: center; gap: 14px; }
+  header img { width: 46px; height: 46px; }
+  header h1 { font-size: 24px; letter-spacing: -0.02em; line-height: 1.1; }
+  header p { color: var(--muted); }
+  header .open { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1.15fr; gap: 7mm; align-items: start; }
+  section + section { margin-top: 6mm; }
+  h2 {
+    font-size: 13px; font-weight: 700; letter-spacing: 0;
+    padding-bottom: 5px; margin-bottom: 4px; border-bottom: 1.5px solid var(--ink);
+  }
+  .row { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; padding: 4.5px 0; border-bottom: 1px solid var(--rule); }
+  .row:last-child { border-bottom: 0; }
+  .keys { display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+  .keys i { font-style: normal; color: var(--muted); font-size: 12px; padding: 0 3px; }
+  .what { color: var(--ink); }
+  .what small { display: block; color: var(--muted); font-size: 12px; }
+
+  kbd {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 22px; height: 22px; padding: 0 6px;
+    font: 600 12px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--ink); background: var(--cap-face);
+    border: 1px solid #cfd0d4; border-radius: 5px;
+    box-shadow: 0 2px 0 var(--cap-edge);
+  }
+  kbd.word { font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-weight: 600; font-size: 12px; }
+  code { font: 12px ui-monospace, "SF Mono", Menlo, monospace; }
+  var { font: 12px ui-monospace, "SF Mono", Menlo, monospace; color: var(--muted); font-style: italic; }
+
+  /* Window positions: a tiny screen with the target area filled. */
+  .layouts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px 8px; margin-top: 6px; }
+  .layout { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .screen { position: relative; width: 100%; aspect-ratio: 16 / 10; background: var(--screen); border-radius: 4px; border: 1px solid #cdced3; }
+  .screen b { position: absolute; background: var(--accent); border-radius: 2px; }
+
+  footer { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; border-top: 1px solid var(--rule); padding-top: 6px; }
+
+  @media screen and (max-width: 1100px) {
+    .sheet { width: auto; padding: 24px 16px; }
+    .grid { grid-template-columns: 1fr; }
+    header { flex-wrap: wrap; }
+    header .open { margin-left: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <header>
+    <img src="../Sources/Normalcy/Resources/AppIcon.png" alt="">
+    <div>
+      <h1>Normalcy Cheatsheet</h1>
+      <p>Default triggers. Rename any of them in Settings.</p>
+    </div>
+    <div class="open">Open the bar <kbd>⌥</kbd><kbd class="word">Space</kbd></div>
+  </header>
+
+  <div class="grid">
+    <div>
+      <section>
+        <h2>In the bar</h2>
+        <div class="row"><span class="keys"><kbd class="word">Return</kbd></span><span class="what">Run the command</span></div>
+        <div class="row"><span class="keys"><kbd>⇧</kbd><kbd class="word">Return</kbd></span><span class="what">Run it, keep the bar open</span></div>
+        <div class="row"><span class="keys"><kbd class="word">Tab</kbd><i>or</i><kbd>⌃</kbd><kbd>N</kbd></span><span class="what">Next in the list</span></div>
+        <div class="row"><span class="keys"><kbd>⇧</kbd><kbd class="word">Tab</kbd><i>or</i><kbd>⌃</kbd><kbd>P</kbd></span><span class="what">Previous in the list</span></div>
+        <div class="row"><span class="keys"><kbd>←</kbd><kbd>↓</kbd><kbd>↑</kbd><kbd>→</kbd></span><span class="what">Same as h j k l</span></div>
+        <div class="row"><span class="keys"><kbd class="word">Esc</kbd></span><span class="what">Clear, or close when empty</span></div>
+        <div class="row"><span class="keys"><kbd>⌃</kbd><kbd>U</kbd></span><span class="what">Clear what you typed</span></div>
+        <div class="row"><span class="keys"><kbd>⌃</kbd><kbd>W</kbd></span><span class="what">Delete the last word</span></div>
+      </section>
+
+      <section>
+        <h2>Apps</h2>
+        <div class="row"><span class="keys"><kbd>o</kbd><var>app</var></span><span class="what">Open or launch an app</span></div>
+        <div class="row"><span class="keys"><kbd>b</kbd><var>app</var></span><span class="what">Switch to a running app<small>Matches the start of the name: <code>b saf</code></small></span></div>
+        <div class="row"><span class="keys"><kbd>b</kbd><kbd>h</kbd><kbd>j</kbd><kbd>k</kbd><kbd>l</kbd></span><span class="what">Nearest window that way</span></div>
+      </section>
+    </div>
+
+    <div>
+      <section>
+        <h2>Desktops and tabs</h2>
+        <div class="row"><span class="keys"><kbd>d</kbd><kbd>2</kbd></span><span class="what">Go to desktop 2 (1–9)</span></div>
+        <div class="row"><span class="keys"><kbd>d</kbd><kbd>h</kbd><i>/</i><kbd>l</kbd></span><span class="what">Desktop on the left / right</span></div>
+        <div class="row"><span class="keys"><kbd>m</kbd><kbd>2</kbd></span><span class="what">Move window to desktop 2, follow it</span></div>
+        <div class="row"><span class="keys"><kbd>m</kbd><kbd>h</kbd><i>/</i><kbd>l</kbd></span><span class="what">Move window left / right a desktop</span></div>
+        <div class="row"><span class="keys"><kbd>t</kbd></span><span class="what">Move tab to its own window</span></div>
+        <div class="row"><span class="keys"><kbd>t</kbd><kbd>h</kbd></span><span class="what">…and put it on the left half<small>Any position works: <code>t l</code>, <code>t f</code>, <code>t hk</code></small></span></div>
+      </section>
+
+      <section>
+        <h2>Size and scroll</h2>
+        <div class="row"><span class="keys"><kbd>f</kbd></span><span class="what">Fill the screen</span></div>
+        <div class="row"><span class="keys"><kbd>c</kbd></span><span class="what">Center the window</span></div>
+        <div class="row"><span class="keys"><kbd>+</kbd><i>/</i><kbd>-</kbd></span><span class="what">10% bigger / smaller, centered</span></div>
+        <div class="row"><span class="keys"><kbd>re</kbd><kbd>l</kbd><i>/</i><kbd>h</kbd></span><span class="what">Wider / narrower</span></div>
+        <div class="row"><span class="keys"><kbd>re</kbd><kbd>j</kbd><i>/</i><kbd>k</kbd></span><span class="what">Taller / shorter<small>Repeat for more: <code>re ll</code>. The window beside it makes room</small></span></div>
+        <div class="row"><span class="keys"><kbd>s</kbd><kbd>j</kbd><kbd>k</kbd><kbd>h</kbd><kbd>l</kbd></span><span class="what">Scroll as you press, no Return<small>Esc stops</small></span></div>
+        <div class="row"><span class="keys"><kbd>set</kbd></span><span class="what">Open Settings</span></div>
+      </section>
+    </div>
+
+    <section>
+      <h2>Window positions</h2>
+      <div class="layouts">
+        <div class="layout"><div class="screen"><b style="inset:3px 50% 3px 3px"></b></div><kbd>h</kbd></div>
+        <div class="layout"><div class="screen"><b style="inset:3px 3px 3px 50%"></b></div><kbd>l</kbd></div>
+        <div class="layout"><div class="screen"><b style="inset:3px 3px 50% 3px"></b></div><kbd>k</kbd></div>
+        <div class="layout"><div class="screen"><b style="inset:50% 3px 3px 3px"></b></div><kbd>j</kbd></div>
+
+        <div class="layout"><div class="screen"><b style="inset:3px 66.6% 3px 3px"></b></div><kbd>h3</kbd></div>
+        <div class="layout"><div class="screen"><b style="inset:3px 33.3% 3px 33.3%"></b></div><kbd>c3</kbd></div>
+        <div class="layout"><div class="screen"><b style="inset:3px 3px 3px 66.6%"></b></div><kbd>l3</kbd></div>
+        <div class="layout"><div class="screen"><b style="inset:3px"></b></div><kbd>f</kbd></div>
+
+        <div class="layout"><div class="screen"><b style="inset:3px 50% 50% 3px"></b></div><kbd>hk</kbd></div>
+        <div class="layout"><div class="screen"><b style="inset:3px 3px 50% 50%"></b></div><kbd>lk</kbd></div>
+        <div class="layout"><div class="screen"><b style="inset:50% 50% 3px 3px"></b></div><kbd>hj</kbd></div>
+        <div class="layout"><div class="screen"><b style="inset:50% 3px 3px 50%"></b></div><kbd>lj</kbd></div>
+      </div>
+      <p style="margin-top:9px;color:var(--muted);font-size:12px">Two arrows make a corner in either order: ← ↑ is hk. Change h j k l to W A S D or I J K L in Settings › Windows and the thirds and quarters follow.</p>
+    </section>
+  </div>
+
+  <footer>
+    <span>Normalcy · keyboard command bar for macOS</span>
+    <span>github.com/POSTTTT/Normalcy</span>
+  </footer>
+</div>
+</body>
+</html>

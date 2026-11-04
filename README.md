@@ -30,6 +30,12 @@ short commands for apps, desktops, tabs and windows, without touching the mouse.
 - **Stays out of the way.** A menu bar app with no Dock icon. The bar appears on
   the hotkey and disappears when you're done.
 
+## Cheatsheet
+
+[![Normalcy cheatsheet](docs/cheatsheet.png)](docs/cheatsheet.html)
+
+Every default trigger on one page. Open [`docs/cheatsheet.html`](docs/cheatsheet.html) in a browser and print it (A4 landscape) to keep it by your keyboard.
+
 ## Requirements
 
 - macOS 14 or later

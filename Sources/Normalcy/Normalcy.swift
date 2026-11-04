@@ -478,10 +478,22 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let w = window ?? focusedWindow(), let screen = NSScreen.main, let primary = NSScreen.screens.first else { return }
         let v = screen.visibleFrame
         // AX uses top-left origin of the primary screen; AppKit uses bottom-left.
-        var origin = CGPoint(x: v.minX + v.width * f.minX, y: primary.frame.maxY - v.maxY + v.height * f.minY)
-        var size = CGSize(width: v.width * f.width, height: v.height * f.height)
+        let bounds = CGRect(x: v.minX, y: primary.frame.maxY - v.maxY, width: v.width, height: v.height)
+        let target = CGRect(x: bounds.minX + v.width * f.minX, y: bounds.minY + v.height * f.minY,
+                            width: v.width * f.width, height: v.height * f.height)
+        var origin = target.origin, size = target.size
         AXUIElementSetAttributeValue(w, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &origin)!)
         AXUIElementSetAttributeValue(w, kAXSizeAttribute as CFString, AXValueCreate(.cgSize, &size)!)
+        // Fixed-size windows (like many settings windows) ignore the size: center what they kept.
+        guard let actual = axFrame(w)?.size, actual != target.size else { return }
+        var centered = Self.center(actual, in: target, bounds: bounds)
+        AXUIElementSetAttributeValue(w, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &centered)!)
+    }
+
+    // Origin that centers a window of this size in the target, kept on screen when it's bigger.
+    static func center(_ size: CGSize, in target: CGRect, bounds: CGRect) -> CGPoint {
+        CGPoint(x: max(bounds.minX, min(target.midX - size.width / 2, bounds.maxX - size.width)),
+                y: max(bounds.minY, min(target.midY - size.height / 2, bounds.maxY - size.height)))
     }
 }
 
@@ -684,6 +696,11 @@ enum Main {
         precondition(HotKey(event: keyEvent([.option], " ", kVK_Space)) == .standard)
         precondition(HotKey(event: keyEvent([.command, .shift], "k", kVK_ANSI_K))?.label == "⇧⌘ K")
         precondition(HotKey(event: keyEvent([.shift], "k", kVK_ANSI_K)) == nil)
+        // A window that kept its size is centered in the target area, and stays on screen.
+        let screen = CGRect(x: 0, y: 25, width: 1000, height: 800)
+        precondition(App.center(CGSize(width: 400, height: 300), in: screen, bounds: screen) == CGPoint(x: 300, y: 275))
+        precondition(App.center(CGSize(width: 400, height: 300), in: CGRect(x: 0, y: 25, width: 500, height: 800), bounds: screen) == CGPoint(x: 50, y: 275))
+        precondition(App.center(CGSize(width: 600, height: 900), in: CGRect(x: 500, y: 25, width: 500, height: 800), bounds: screen) == CGPoint(x: 400, y: 25))
         // Every default trigger is unique.
         precondition(Set(d.map(\.trigger)).count == d.count)
         print("selftest ok")

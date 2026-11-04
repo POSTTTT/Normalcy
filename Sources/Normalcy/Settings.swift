@@ -366,7 +366,7 @@ struct CommandSettings: View {
                     }
                 }
             }
-            Section("Direction Keys") {
+            Section {
                 Picker("Preset", selection: presetBinding) {
                     ForEach(presets, id: \.0) { Text($0.1).tag($0.0) }
                     if !presets.contains(where: { $0.0 == currentKeys }) { Text("Custom").tag(currentKeys) }
@@ -387,8 +387,13 @@ struct CommandSettings: View {
                     }
                 } label: {
                     Text("Keys")
-                    Text("Halves, thirds, quarters, and the direction after d, m and t. Arrow keys always work.")
                 }
+            } header: {
+                Text("Direction Keys")
+            } footer: {
+                Text("Halves, thirds, quarters, and the direction after d, m, t and re. Arrow keys always work.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             ForEach(groups, id: \.self) { g in
                 Section(g) {

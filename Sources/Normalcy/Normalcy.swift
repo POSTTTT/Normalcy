@@ -1144,6 +1144,7 @@ enum Main {
         pt.defs = { d }
         pt.pointerStep = { 50 }
         pt.pointerPreview = { true }
+        pt.pointerKeys = { "" }
         var moved: [Command] = []
         pt.live = { moved.append($0) }
         pt.screen = CGRect(x: 0, y: 100, width: 1000, height: 800)
@@ -1161,11 +1162,25 @@ enum Main {
         precondition(pt.pointerKey("k") && pt.pointerArea == CGRect(x: 0, y: 0, width: 1, height: 0.5))
         pt.enter()
         precondition(pt.pointerArea == CGRect(x: 0, y: 0, width: 1, height: 1))
+        pt.text = "mo "
+        precondition(pt.pointerKey("h") && pt.pointerArea.width == 0.5)
+        pt.escape()
+        precondition(pt.text == "" && pt.pointerArea == CGRect(x: 0, y: 0, width: 1, height: 1)) // Esc starts over too
         pt.text = "ms "
         precondition(pt.pointerKey("j") && moved.last == .pointerBy(CGSize(width: 0, height: 50)))
         precondition(!pt.pointerKey("x"))
         pt.text = "s "
         precondition(!pt.pointerKey("j")) // only after a pointer command
+        // mo / ms with their own keys (W A S D): those move, h j k l are typed as usual.
+        pt.pointerKeys = { "aswd" }
+        pt.text = "mo"
+        precondition(pt.typeDirection("d") && pt.text == "mo " && pt.pointerArea == CGRect(x: 0.5, y: 0, width: 0.5, height: 1))
+        precondition(pt.pointerKey("w") && pt.pointerArea == CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5))
+        precondition(!pt.pointerKey("l") && pt.pointerKey("→")) // arrows always work
+        precondition(pt.pointerKey("S") && moved.last == .pointerBy(CGSize(width: 0, height: 10)))
+        pt.text = "d"
+        precondition(pt.typeDirection("h") && pt.text == "d h") // other commands keep the window keys
+        pt.pointerKeys = { "" }
         // Resizes preview where the window will go.
         let rp = Palette()
         rp.defs = { d }

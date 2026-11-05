@@ -266,6 +266,10 @@ final class Store: ObservableObject {
     @Published var pointerPreview = UserDefaults.standard.object(forKey: "pointerPreview") as? Bool ?? true { // mo's area box
         didSet { UserDefaults.standard.set(pointerPreview, forKey: "pointerPreview") }
     }
+    // Left, down, up, right for mo and ms; empty means the window direction keys.
+    @Published var pointerKeys = UserDefaults.standard.string(forKey: "pointerKeys") ?? "" {
+        didSet { UserDefaults.standard.set(pointerKeys, forKey: "pointerKeys") }
+    }
     @Published var pointerStep = UserDefaults.standard.object(forKey: "pointerStep") as? Int ?? 50 { // points, for ms
         didSet { UserDefaults.standard.set(pointerStep, forKey: "pointerStep") }
     }
@@ -364,6 +368,22 @@ struct GeneralSettings: View {
 struct CommandSettings: View {
     @ObservedObject var store = Store.shared
 
+    // One of mo / ms's own direction keys, showing the window key while none are set.
+    func pointerKey(_ i: Int) -> Binding<String> {
+        let current = {
+            store.pointerKeys.count == 4 ? Array(store.pointerKeys).map(String.init)
+                : Action.directions.map { a in store.defs.first { $0.id == a.rawValue }?.trigger ?? "" }
+        }
+        return Binding(get: { current()[i] }, set: { v in
+            // r and 2 pick the click; one key can't mean two directions.
+            guard let k = v.last.map({ String($0).lowercased() }), k.count == 1, !["r", "2", " "].contains(k) else { return }
+            var keys = current()
+            guard !keys.enumerated().contains(where: { $0.offset != i && $0.element == k }) else { return }
+            keys[i] = k
+            store.pointerKeys = keys.joined()
+        })
+    }
+
     var body: some View {
         CommandGroups(groups: ["Apps", "Desktops & Tabs", "Scroll", "Pointer", "Other"],
                       note: "The key cap is what you type. Click it to change it; switch a command off to hide it.") {
@@ -374,10 +394,24 @@ struct CommandSettings: View {
                     LabeledContent("Each direction key after ms", value: "\(store.pointerStep) points")
                 }
                 Toggle("Show the area left after mo", isOn: $store.pointerPreview)
+                Picker("Direction keys", selection: $store.pointerKeys) {
+                    Text("Same as windows").tag("")
+                    ForEach(WindowSettings.presets, id: \.0) { Text($0.1).tag($0.0) }
+                    if !store.pointerKeys.isEmpty, !WindowSettings.presets.contains(where: { $0.0 == store.pointerKeys }) {
+                        Text("Custom").tag(store.pointerKeys)
+                    }
+                }
+                LabeledContent("Left, down, up, right") {
+                    HStack(spacing: 6) {
+                        ForEach(0..<4, id: \.self) { i in
+                            KeyCapField(text: pointerKey(i), label: Action.directions[i].title)
+                        }
+                    }
+                }
             } header: {
                 Text("Pointer")
             } footer: {
-                Text("Uppercase keys always move 10 points, for the last bit.")
+                Text("Uppercase keys always move 10 points, for the last bit. r and 2 are kept for clicks.")
                     .settingsFooter()
             }
         }
@@ -387,7 +421,7 @@ struct CommandSettings: View {
 struct WindowSettings: View {
     @ObservedObject var store = Store.shared
     // Direction keys in left, down, up, right order.
-    let presets = [("hjkl", "H J K L"), ("aswd", "W A S D"), ("jkil", "I J K L")]
+    static let presets = [("hjkl", "H J K L"), ("aswd", "W A S D"), ("jkil", "I J K L")]
 
     var body: some View {
         let currentKeys = Action.directions.map { a in store.defs.first { $0.id == a.rawValue }?.trigger ?? "" }.joined()
@@ -398,8 +432,8 @@ struct WindowSettings: View {
                       note: "Thirds and quarters are built from the direction keys, so changing those renames them too.") {
             Section {
                 Picker("Preset", selection: presetBinding) {
-                    ForEach(presets, id: \.0) { Text($0.1).tag($0.0) }
-                    if !presets.contains(where: { $0.0 == currentKeys }) { Text("Custom").tag(currentKeys) }
+                    ForEach(Self.presets, id: \.0) { Text($0.1).tag($0.0) }
+                    if !Self.presets.contains(where: { $0.0 == currentKeys }) { Text("Custom").tag(currentKeys) }
                 }
                 LabeledContent("Left, down, up, right") {
                     HStack(spacing: 6) {

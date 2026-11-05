@@ -11,7 +11,8 @@ struct AppItem: Equatable {
 final class Palette: ObservableObject {
     // The highlight goes back to the top only when the text really changes: the text field
     // also writes back the same value when the view redraws (e.g. a preview arriving).
-    @Published var text = "" { didSet { if text != oldValue { selected = 0 } } }
+    // Any change also gives mo the whole screen again: keys inside mo never change the text.
+    @Published var text = "" { didSet { if text != oldValue { selected = 0; pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1) } } }
     var live: (Command) -> Void = { _ in }
     @Published var apps: [AppItem] = [] // running apps, by name; refreshed when the bar opens
     var installed: [AppItem] = [] // apps in the Applications folders, by name
@@ -32,7 +33,9 @@ final class Palette: ObservableObject {
     var steps: () -> ResizeSteps = { Store.shared.resizeSteps }
     var pointerStep: () -> CGFloat = { CGFloat(Store.shared.pointerStep) } // points per key after "ms "
     var pointerPreview: () -> Bool = { Store.shared.pointerPreview } // box around what's left after "mo "
-    // What's left of the screen after "mo " halvings, as fractions; whole again on Return.
+    var pointerKeys: () -> String = { Store.shared.pointerKeys } // left, down, up, right for mo / ms; "" = the window keys
+    // What's left of the screen after "mo " halvings, as fractions; whole again on Return,
+    // Space, or any change to the text (Esc, another command, the bar closing).
     @Published var pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1)
 
     // The desktop-related command being typed or highlighted, if any.
@@ -149,8 +152,13 @@ final class Palette: ObservableObject {
             if let s = screen { live(.pointerTo(CGPoint(x: s.midX, y: s.midY))) } // shows the reset
             return true
         }
-        guard let mode = pointerMode, let dir = Command.direction(lower, in: defs()),
-              let step = Command.directionSteps(lower, defs()) else { return false }
+        guard let mode = pointerMode, let dir = pointerDirection(lower) else { return false }
+        let step: CGSize = switch dir {
+        case .left: CGSize(width: -1, height: 0)
+        case .right: CGSize(width: 1, height: 0)
+        case .top: CGSize(width: 0, height: -1)
+        default: CGSize(width: 0, height: 1)
+        }
         if key != lower || mode == .pointerStep {
             let n: CGFloat = key != lower ? 10 : pointerStep()
             live(.pointerBy(CGSize(width: step.width * n, height: step.height * n)))
@@ -168,6 +176,14 @@ final class Palette: ObservableObject {
         return true
     }
 
+    // A direction for mo / ms: an arrow, one of their own keys if set, or else a window direction key.
+    func pointerDirection(_ key: String) -> Action? {
+        if let a = Command.arrowAction(key) { return a }
+        let own = Array(pointerKeys())
+        guard own.count == 4 else { return Command.direction(key, in: defs()) }
+        return key.count == 1 ? own.firstIndex(of: Character(key)).map { Action.directions[$0] } : nil
+    }
+
     // Arrow keys type ← ↓ ↑ →, which work like h j k l.
     func typeArrow(_ arrow: String) {
         if !typeDirection(arrow) { text += arrow }
@@ -178,10 +194,11 @@ final class Palette: ObservableObject {
     // text plus the key starts another trigger. Returns false when the key should be typed as usual.
     func typeDirection(_ key: String) -> Bool {
         let defs = defs()
-        guard Command.direction(key, in: defs) != nil else { return false }
         if scrollKey(key) || pointerKey(key) { return true }
-        let takesArg = defs.contains { $0.enabled && $0.trigger == text && Action(rawValue: $0.id)?.argHint != nil }
-        guard takesArg, !defs.contains(where: { $0.enabled && $0.trigger.hasPrefix(text + key) }) else { return false }
+        guard let head = defs.first(where: { $0.enabled && $0.trigger == text }).flatMap({ Action(rawValue: $0.id) }) else { return false }
+        // mo and ms may have their own direction keys.
+        let isDirection = head == .pointer || head == .pointerStep ? pointerDirection(key) != nil : Command.direction(key, in: defs) != nil
+        guard isDirection, head.argHint != nil, !defs.contains(where: { $0.enabled && $0.trigger.hasPrefix(text + key) }) else { return false }
         text += " "
         if !scrollKey(key), !pointerKey(key) { text += key }
         return true

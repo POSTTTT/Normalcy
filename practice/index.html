@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Normalcy Practice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Tokens and components from the monospace design system (One Dark), copied in so this
+     page works on its own. The system is dark only; the light theme is derived from it:
+     same teal and coral, deepened to read on white. */
+  :root {
+    --ds-color-bg-canvas: #282c34;
+    --ds-color-bg-surface: #1e2228;
+    --ds-color-bg-code: #111111;
+    --ds-color-fg-default: #9cdef2;
+    --ds-color-fg-muted: #8aa6af;
+    --ds-color-fg-on-accent: #ffffff;
+    --ds-color-accent-primary: #e06c75;
+    --ds-color-accent-secondary: #f0989e;
+    --ds-color-border-default: #355a66;
+    --ds-color-feedback-success: #50fa7b;
+    --ds-color-feedback-warning: #f0ad4e;
+    --ds-color-feedback-danger: #e06c75;
+    --ds-shadow-md: 0 12px 40px #00000066;
+    --ds-shadow-lg: 0 24px 60px #00000066;
+    --ds-shadow-glow: 0 4px 18px #e06c7559;
+    --ds-radius-sm: 0.375rem;
+    --ds-radius-md: 0.5rem;
+    --ds-radius-lg: 0.625rem;
+    --ds-font-mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --ds-wide: 0.08em;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --ds-color-bg-canvas: #eef1f3; --ds-color-bg-surface: #ffffff; --ds-color-bg-code: #f6f8f9;
+      --ds-color-fg-default: #164b5a; --ds-color-fg-muted: #4f6870;
+      --ds-color-accent-primary: #c43d4b; --ds-color-accent-secondary: #d9646f;
+      --ds-color-border-default: #b4cbd2;
+      --ds-color-feedback-success: #1d7a3a; --ds-color-feedback-warning: #9a5b00; --ds-color-feedback-danger: #c43d4b;
+      --ds-shadow-md: 0 12px 40px #1e3a4426; --ds-shadow-lg: 0 24px 60px #1e3a4426; --ds-shadow-glow: 0 4px 18px #c43d4b40;
+      color-scheme: light;
+    }
+  }
+  :root[data-theme="light"] {
+    --ds-color-bg-canvas: #eef1f3; --ds-color-bg-surface: #ffffff; --ds-color-bg-code: #f6f8f9;
+    --ds-color-fg-default: #164b5a; --ds-color-fg-muted: #4f6870;
+    --ds-color-accent-primary: #c43d4b; --ds-color-accent-secondary: #d9646f;
+    --ds-color-border-default: #b4cbd2;
+    --ds-color-feedback-success: #1d7a3a; --ds-color-feedback-warning: #9a5b00; --ds-color-feedback-danger: #c43d4b;
+    --ds-shadow-md: 0 12px 40px #1e3a4426; --ds-shadow-lg: 0 24px 60px #1e3a4426; --ds-shadow-glow: 0 4px 18px #c43d4b40;
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; min-height: 100vh;
+    background: var(--ds-color-bg-canvas); color: var(--ds-color-fg-default);
+    font: 14px/1.6 var(--ds-font-mono);
+    font-variant-ligatures: none; /* "->" should stay two characters here */
+  }
+  main { max-width: 920px; margin: 0 auto; padding: 40px 16px 72px; }
+
+  /* Terminal window: the page's one frame */
+  .device {
+    background: var(--ds-color-bg-code); border: 1px solid var(--ds-color-border-default);
+    border-radius: var(--ds-radius-lg); box-shadow: var(--ds-shadow-lg); overflow: hidden;
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+    background: var(--ds-color-bg-surface); border-bottom: 1px solid var(--ds-color-border-default);
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: var(--ds-color-feedback-danger); }
+  .dot.y { background: var(--ds-color-feedback-warning); }
+  .dot.g { background: var(--ds-color-feedback-success); }
+  .term-title { margin-left: 8px; font-size: 12px; color: var(--ds-color-fg-muted); }
+  .term-body { padding: 28px; }
+
+  .legend { font-size: 12px; text-transform: uppercase; letter-spacing: var(--ds-wide); color: var(--ds-color-fg-muted); }
+  .legend::before { content: "// "; opacity: .7; }
+
+  header { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; justify-content: space-between; margin-bottom: 26px; }
+  h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.12; margin: 8px 0; }
+  h1::before { content: "> "; color: var(--ds-color-accent-primary); }
+  .lede { color: var(--ds-color-fg-muted); margin: 0; max-width: 52ch; }
+
+  /* Buttons: outlined; the chosen one in a segment fills with the coral gradient */
+  .key {
+    position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font: 600 13px/1 var(--ds-font-mono); color: var(--ds-color-fg-default);
+    background: var(--ds-color-bg-code); border: 1px solid var(--ds-color-border-default);
+    border-radius: var(--ds-radius-lg); padding: 9px 14px; cursor: pointer;
+    transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, color 120ms ease, filter 120ms ease;
+  }
+  .key:hover { transform: translateY(-1px); border-color: var(--ds-color-accent-primary); }
+  .key:active { transform: translateY(1px); }
+  .key:focus-visible { outline: 2px solid var(--ds-color-accent-primary); outline-offset: 2px; }
+  .key[aria-pressed="true"] {
+    background: linear-gradient(135deg, var(--ds-color-accent-primary), var(--ds-color-accent-secondary));
+    color: var(--ds-color-fg-on-accent); border-color: transparent;
+  }
+  .segment { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+
+  .controls-row { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: flex-end; margin-bottom: 20px; }
+  .field { display: flex; flex-direction: column; gap: 8px; }
+  .custom { display: flex; gap: 6px; }
+  .custom[hidden] { display: none; }
+  .custom input {
+    width: 38px; height: 36px; text-align: center; font: 600 14px var(--ds-font-mono);
+    color: var(--ds-color-fg-default); background: var(--ds-color-bg-code);
+    border: 1px solid var(--ds-color-border-default); border-radius: var(--ds-radius-md);
+  }
+  .custom input:focus { outline: none; border-color: var(--ds-color-accent-primary); box-shadow: var(--ds-shadow-glow); }
+
+  /* [x] checkbox */
+  .check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; padding: 9px 0; }
+  .check input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .check .box::before { content: "[ ]"; color: var(--ds-color-fg-muted); }
+  .check input:checked + .box::before { content: "[x]"; color: var(--ds-color-accent-primary); }
+  .check input:focus-visible + .box { outline: 2px solid var(--ds-color-accent-primary); outline-offset: 2px; }
+
+  /* Panels and readouts */
+  .recess { background: var(--ds-color-bg-surface); border: 1px solid var(--ds-color-border-default); border-radius: var(--ds-radius-md); }
+  .display {
+    position: relative; overflow: hidden; background: var(--ds-color-bg-surface);
+    border: 1px solid var(--ds-color-border-default); border-radius: var(--ds-radius-md);
+  }
+  .readout { padding: 10px 16px; min-width: 120px; }
+  .readout .label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: var(--ds-wide); color: var(--ds-color-fg-muted); }
+  .readout .value { display: block; font-size: 28px; font-weight: 600; line-height: 1.12; font-variant-numeric: tabular-nums; }
+  .readout .value small { font-size: 12px; color: var(--ds-color-fg-muted); margin-left: 4px; font-weight: 500; }
+  .readout.urgent { border-color: var(--ds-color-accent-primary); }
+  .readout.urgent .value { color: var(--ds-color-accent-primary); animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: .45; } }
+
+  .panel { animation: panel-in 220ms var(--ease-out); }
+  .panel[hidden] { display: none; }
+  @keyframes panel-in { from { opacity: 0; transform: translateY(6px); } }
+
+  /* Directions: one line that slides left under a fixed marker */
+  .track {
+    position: relative; height: 92px; overflow: hidden;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 22%, #000 90%, transparent 100%);
+            mask-image: linear-gradient(to right, transparent 0, #000 22%, #000 90%, transparent 100%);
+  }
+  .strip { position: absolute; top: 17px; left: 0; display: flex; gap: 10px; transition: transform 160ms var(--ease-out); will-change: transform; }
+  .cap {
+    flex: none; width: 46px; height: 56px; border-radius: var(--ds-radius-md);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font: 600 22px var(--ds-font-mono); color: var(--ds-color-fg-default);
+    background: var(--ds-color-bg-code); border: 1px solid var(--ds-color-border-default);
+    transition: transform 100ms ease, opacity 260ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .cap small { font: 500 11px var(--ds-font-mono); color: var(--ds-color-fg-muted); margin-top: 3px; }
+  .cap.now {
+    background: linear-gradient(135deg, var(--ds-color-accent-primary), var(--ds-color-accent-secondary));
+    color: var(--ds-color-fg-on-accent); border-color: transparent; box-shadow: var(--ds-shadow-glow);
+  }
+  .cap.now small { color: var(--ds-color-fg-on-accent); opacity: .85; }
+  .cap.done { color: var(--ds-color-feedback-success); border-color: transparent; opacity: .4; transform: translateY(2px); }
+  .cap.done small { color: inherit; }
+  /* Wrong key: the cap shakes and dims; red text would vanish on coral. */
+  .cap.miss { animation: shake 180ms, dim 260ms; }
+  @keyframes shake { 25% { translate: -4px 0; } 75% { translate: 4px 0; } }
+  @keyframes dim { 30% { filter: brightness(.7) saturate(.5); } }
+
+  .bottom { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; margin-top: 14px; }
+  .status { flex: 1 1 260px; display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 64px; color: var(--ds-color-fg-muted); }
+  /* The prompt: "$", the message, and a cursor block that blinks while a run is live */
+  .led::before { content: "$"; color: var(--ds-color-accent-primary); font-weight: 700; }
+  .led.ok::before { content: "✓"; color: var(--ds-color-feedback-success); }
+  .status:has(.led.on)::after { content: ""; width: 8px; height: 16px; background: var(--ds-color-fg-default); animation: blink 1s steps(1) infinite; }
+  .status:has(.led.on) { color: var(--ds-color-fg-default); }
+  .restart { width: 64px; padding: 0; }
+  .restart svg { width: 20px; height: 20px; transition: transform 380ms var(--ease-out); }
+  .restart.spin svg { transform: rotate(-360deg); transition-duration: 0s; }
+
+  /* Direction pad: lights the key you pressed */
+  .pad-row { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; margin-top: 20px; }
+  .pad { display: grid; grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(2, 46px); gap: 6px; }
+  .pad .key { width: 46px; height: 46px; padding: 0; flex-direction: column; gap: 0; font-size: 16px; cursor: default; }
+  .pad .key:hover { transform: none; border-color: var(--ds-color-border-default); }
+  .pad .key small { font: 500 10px var(--ds-font-mono); color: var(--ds-color-fg-muted); margin-top: 3px; }
+  .pad .key.down { transform: translateY(2px); border-color: var(--ds-color-accent-primary); color: var(--ds-color-accent-primary); box-shadow: var(--ds-shadow-glow); }
+  .pad .key.bad { border-color: var(--ds-color-feedback-warning); color: var(--ds-color-feedback-warning); box-shadow: none; }
+  .pad [data-d="2"] { grid-column: 2; grid-row: 1; }
+  .pad [data-d="0"] { grid-column: 1; grid-row: 2; }
+  .pad [data-d="1"] { grid-column: 2; grid-row: 2; }
+  .pad [data-d="3"] { grid-column: 3; grid-row: 2; }
+  .hint { color: var(--ds-color-fg-muted); font-size: 13px; margin: 0; max-width: 58ch; }
+  kbd {
+    font: 600 12px var(--ds-font-mono); padding: 1px 6px; border-radius: var(--ds-radius-sm);
+    color: var(--ds-color-fg-default); background: var(--ds-color-bg-surface); border: 1px solid var(--ds-color-border-default);
+  }
+
+  /* Pointer: a code surface with a faint grid, the area, the target and the crosshair */
+  .screen {
+    width: 100%; aspect-ratio: 16 / 10; background-color: var(--ds-color-bg-code);
+    background-image:
+      linear-gradient(color-mix(in srgb, var(--ds-color-border-default) 35%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--ds-color-border-default) 35%, transparent) 1px, transparent 1px);
+    background-size: 6.25% 10%;
+  }
+  .screen.shake { animation: shake 220ms; }
+  .area {
+    position: absolute; z-index: 1; border-radius: 4px;
+    border: 1.5px dashed var(--ds-color-fg-default);
+    background: color-mix(in srgb, var(--ds-color-fg-default) 8%, transparent);
+    transition: left 150ms var(--ease-out), top 150ms var(--ease-out), width 150ms var(--ease-out), height 150ms var(--ease-out), opacity 150ms ease;
+  }
+  .area.full { opacity: 0; }
+  .target {
+    position: absolute; z-index: 1; border-radius: 50%; translate: -50% -50%;
+    background: linear-gradient(135deg, var(--ds-color-accent-primary), var(--ds-color-accent-secondary));
+    box-shadow: var(--ds-shadow-glow);
+    animation: pop 240ms var(--ease-out);
+  }
+  @keyframes pop { from { scale: 0.4; opacity: 0; } }
+  .ring {
+    position: absolute; z-index: 1; border-radius: 50%; translate: -50% -50%; pointer-events: none;
+    border: 2px solid var(--ds-color-feedback-success); animation: ring 420ms var(--ease-out) forwards;
+  }
+  @keyframes ring { from { scale: 1; opacity: .9; } to { scale: 3.2; opacity: 0; } }
+  .ptr { position: absolute; z-index: 2; width: 18px; height: 18px; translate: -50% -50%; transition: left 150ms var(--ease-out), top 150ms var(--ease-out); }
+  .ptr::before, .ptr::after { content: ""; position: absolute; background: var(--ds-color-fg-default); }
+  .ptr::before { left: 8px; top: 0; width: 2px; height: 18px; }
+  .ptr::after { top: 8px; left: 0; height: 2px; width: 18px; }
+  .over {
+    position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; text-align: center;
+    background: color-mix(in srgb, var(--ds-color-bg-code) 88%, transparent); animation: panel-in 260ms var(--ease-out);
+  }
+  .over[hidden] { display: none; }
+  .over b { display: block; font-size: 40px; font-weight: 700; color: var(--ds-color-accent-primary); }
+
+  .theme { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+  @media (max-width: 560px) {
+    .term-body { padding: 18px; }
+    .theme { align-items: flex-start; }
+    .readout { min-width: 0; flex: 1; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="device">
+    <div class="term-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="term-title">normalcy — practice</span></div>
+    <div class="term-body">
+    <header>
+      <div>
+        <h1>keep your hands on the keys</h1>
+        <p class="lede">Drill the direction keys and the <kbd>mo</kbd> pointer until they're muscle memory.</p>
+      </div>
+      <div class="theme">
+        <span class="legend">Theme</span>
+        <div class="segment" id="theme">
+          <button class="key" data-v="system">System</button>
+          <button class="key" data-v="light">Light</button>
+          <button class="key" data-v="dark">Dark</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="controls-row">
+      <div class="field">
+        <span class="legend">Drill</span>
+        <div class="segment" id="tabs">
+          <button class="key" data-v="dirs">Directions</button>
+          <button class="key" data-v="ptr">Pointer halves</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="legend">Keys</span>
+        <div class="segment" id="preset">
+          <button class="key" data-v="hjkl">H J K L</button>
+          <button class="key" data-v="aswd">W A S D</button>
+          <button class="key" data-v="jkil">I J K L</button>
+          <button class="key" data-v="custom">Custom</button>
+        </div>
+      </div>
+      <div class="field custom" id="custom" hidden>
+        <input type="text" maxlength="1" aria-label="Left key">
+        <input type="text" maxlength="1" aria-label="Down key">
+        <input type="text" maxlength="1" aria-label="Up key">
+        <input type="text" maxlength="1" aria-label="Right key">
+      </div>
+    </div>
+
+    <!-- Directions -->
+    <section class="panel" id="dirs">
+      <div class="controls-row">
+        <div class="field">
+          <span class="legend">Time</span>
+          <div class="segment" id="dDuration">
+            <button class="key" data-v="15">0:15</button>
+            <button class="key" data-v="30">0:30</button>
+            <button class="key" data-v="60">1:00</button>
+            <button class="key" data-v="120">2:00</button>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" id="showKeys"><span class="box"></span>keys under arrows</label>
+      </div>
+      <div class="recess track"><div class="strip" id="strip"></div></div>
+      <div class="bottom">
+        <div class="recess status"><span class="led" id="dLed"></span><span id="dStatus">Press a key to start</span></div>
+        <div class="display readout"><span class="label">Speed</span><span class="value"><span id="dSpeed">0</span><small>KPM</small></span></div>
+        <div class="display readout" id="dClock"><span class="label">Time</span><span class="value" id="dTime">1:00</span></div>
+        <button class="key restart" id="dRestart" aria-label="Restart" title="Restart (Return)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- Pointer halves -->
+    <section class="panel" id="ptr" hidden>
+      <div class="controls-row">
+        <div class="field">
+          <span class="legend">Target</span>
+          <div class="segment" id="pLevel">
+            <button class="key" data-v="easy">Easy</button>
+            <button class="key" data-v="normal">Normal</button>
+            <button class="key" data-v="hard">Hard</button>
+          </div>
+        </div>
+        <div class="field">
+          <span class="legend">Time</span>
+          <div class="segment" id="pDuration">
+            <button class="key" data-v="30">0:30</button>
+            <button class="key" data-v="60">1:00</button>
+            <button class="key" data-v="120">2:00</button>
+          </div>
+        </div>
+      </div>
+      <div class="display screen" id="screen">
+        <div class="area full" id="area"></div>
+        <div class="ptr" id="pointer"></div>
+        <div class="over" id="pOver" hidden></div>
+      </div>
+      <div class="bottom">
+        <div class="recess status"><span class="led" id="pLed"></span><span id="pStatus">Press a key to start</span></div>
+        <div class="display readout"><span class="label">Hits</span><span class="value" id="pHits">0</span></div>
+        <div class="display readout"><span class="label">Keys · fewest</span><span class="value"><span id="pKeys">0</span><small id="pPar">/ –</small></span></div>
+        <div class="display readout" id="pClock"><span class="label">Time</span><span class="value" id="pTime">1:00</span></div>
+        <button class="key restart" id="pRestart" aria-label="Restart" title="Restart">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <div class="pad-row">
+      <div class="pad" id="pad" aria-hidden="true">
+        <span class="key" data-d="2">↑<small></small></span>
+        <span class="key" data-d="0">←<small></small></span>
+        <span class="key" data-d="1">↓<small></small></span>
+        <span class="key" data-d="3">→<small></small></span>
+      </div>
+      <p class="hint" id="hint"></p>
+    </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// Directions in Normalcy's order: left, down, up, right.
+const ARROWS = ["←", "↓", "↑", "→"];
+const ARROW_KEYS = { ArrowLeft: 0, ArrowDown: 1, ArrowUp: 2, ArrowRight: 3 };
+const HINTS = {
+  dirs: 'Press the key for the highlighted arrow. A wrong key doesn\'t move on; arrow keys work too. KPM is correct keys per minute. <kbd>Return</kbd> restarts.',
+  ptr: 'Like <kbd>mo</kbd>: each key keeps that half of the area and moves the crosshair to its middle. <kbd>Space</kbd> starts over, <kbd>Return</kbd> clicks. Hit as many targets as you can before time runs out.',
+};
+
+// Storage can be missing (private windows, blocked site data); everything works without it.
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("normalcy-practice-" + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("normalcy-practice-" + k, JSON.stringify(v)); } catch {} },
+};
+
+// A row of latching keys: one pressed at a time.
+function segment(id, value, onChange) {
+  const el = document.getElementById(id);
+  const buttons = [...el.querySelectorAll("[data-v]")];
+  const set = v => buttons.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
+  set(value);
+  buttons.forEach(b => b.addEventListener("click", () => { set(b.dataset.v); b.blur(); onChange(b.dataset.v); }));
+  return set;
+}
+
+/* ---------- Theme ---------- */
+const root = document.documentElement;
+function applyTheme(t) { if (t === "system") delete root.dataset.theme; else root.dataset.theme = t; store.set("theme", t); }
+applyTheme(store.get("theme", "system"));
+segment("theme", store.get("theme", "system"), applyTheme);
+
+/* ---------- Keys ---------- */
+let keys = store.get("keys", "hjkl");
+const custom = document.getElementById("custom");
+const customInputs = [...custom.querySelectorAll("input")];
+const isPreset = k => ["hjkl", "aswd", "jkil"].includes(k);
+const setPreset = segment("preset", isPreset(keys) ? keys : "custom", v => {
+  if (v !== "custom") keys = v;
+  custom.hidden = v !== "custom";
+  if (v === "custom") customInputs[0].focus();
+  keysChanged();
+});
+custom.hidden = isPreset(keys);
+function keysChanged() {
+  store.set("keys", keys);
+  customInputs.forEach((el, i) => { el.value = keys[i] || ""; });
+  document.querySelectorAll("#pad [data-d]").forEach(k => { k.querySelector("small").textContent = keys[+k.dataset.d] || ""; });
+  relabel();
+}
+customInputs.forEach((el, i) => el.addEventListener("input", () => {
+  const k = el.value.toLowerCase().slice(-1);
+  // One key can't mean two directions; Space and Return are taken.
+  if (!k || k === " " || [...keys].some((c, j) => j !== i && c === k)) { el.value = keys[i]; return; }
+  keys = keys.slice(0, i) + k + keys.slice(i + 1);
+  keysChanged();
+  if (customInputs[i + 1]) customInputs[i + 1].focus(); else el.blur();
+}));
+
+// Direction for a key event, or -1.
+function dirOf(e) {
+  if (e.key in ARROW_KEYS) return ARROW_KEYS[e.key];
+  return e.key.length === 1 ? keys.indexOf(e.key.toLowerCase()) : -1;
+}
+
+// The pad dips the key you pressed; red when it was wrong.
+const padKeys = [...document.querySelectorAll("#pad [data-d]")].sort((a, b) => a.dataset.d - b.dataset.d);
+function pressPad(d, ok = true) {
+  const k = padKeys[d];
+  k.classList.add("down"); k.classList.toggle("bad", !ok);
+  clearTimeout(k._t);
+  k._t = setTimeout(() => k.classList.remove("down", "bad"), 120);
+}
+
+function clock(ms) {
+  const s = Math.ceil(ms / 1000);
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+function spin(btn) { btn.classList.add("spin"); requestAnimationFrame(() => requestAnimationFrame(() => btn.classList.remove("spin"))); }
+
+/* ---------- Tabs ---------- */
+let tab = store.get("tab", "dirs");
+function showTab(t) {
+  tab = t; store.set("tab", t);
+  document.getElementById("dirs").hidden = t !== "dirs";
+  document.getElementById("ptr").hidden = t !== "ptr";
+  document.getElementById("hint").innerHTML = HINTS[t];
+  if (t === "ptr") layoutPointer(); else place();
+}
+segment("tabs", tab, showTab);
+
+/* ---------- Directions drill ---------- */
+const stripEl = document.getElementById("strip");
+const trackEl = stripEl.parentElement;
+const showKeysEl = document.getElementById("showKeys");
+const dStatus = document.getElementById("dStatus"), dLed = document.getElementById("dLed");
+let dDuration = +store.get("dDuration", "60");
+showKeysEl.checked = store.get("showKeys", true);
+const CAP = 56; // cap width plus gap, in px
+let seq = [], at = 0, errors = 0, dStart = 0, dDone = false, dTimer = 0;
+
+// Random directions, never the same one three times running.
+function more(n) {
+  for (let i = 0; i < n; i++) {
+    let d;
+    do d = Math.floor(Math.random() * 4);
+    while (seq.length >= 2 && seq[seq.length - 1] === d && seq[seq.length - 2] === d);
+    seq.push(d);
+    stripEl.append(makeCap(d));
+  }
+}
+function makeCap(d) {
+  const c = document.createElement("div");
+  c.className = "cap";
+  c.textContent = ARROWS[d];
+  if (showKeysEl.checked) { const s = document.createElement("small"); s.textContent = keys[d] || ""; c.append(s); }
+  return c;
+}
+function newRun() {
+  clearInterval(dTimer);
+  seq = []; at = 0; errors = 0; dStart = 0; dDone = false;
+  stripEl.innerHTML = "";
+  more(60);
+  dStatus.textContent = "Press a key to start";
+  dLed.className = "led";
+  place(); renderDirStats();
+}
+// Holds the current arrow 40% across; everything slides left under it.
+function place() {
+  [...stripEl.children].forEach((c, i) => {
+    c.classList.toggle("done", i < at);
+    c.classList.toggle("now", i === at && !dDone);
+  });
+  stripEl.style.transform = `translateX(${trackEl.clientWidth * 0.4 - at * CAP}px)`;
+}
+function relabel() {
+  stripEl.innerHTML = "";
+  seq.forEach(d => stripEl.append(makeCap(d)));
+  place();
+}
+function dLeft() { return dStart ? Math.max(0, dDuration * 1000 - (performance.now() - dStart)) : dDuration * 1000; }
+function renderDirStats() {
+  const ms = dLeft(), elapsed = dDuration * 1000 - ms;
+  document.getElementById("dTime").textContent = clock(ms);
+  document.getElementById("dClock").classList.toggle("urgent", dStart > 0 && !dDone && ms <= 5000);
+  document.getElementById("dSpeed").textContent = dStart && elapsed > 1000 ? Math.round(at / (elapsed / 60000)) : 0;
+}
+function dFinish() {
+  dDone = true; clearInterval(dTimer);
+  const kpm = Math.round(at / (dDuration / 60));
+  const acc = at ? Math.round(100 * at / (at + errors)) : 0;
+  const bestKey = "bestKpm-" + dDuration;
+  const best = Math.max(kpm, store.get(bestKey, 0));
+  store.set(bestKey, best);
+  renderDirStats();
+  document.getElementById("dSpeed").textContent = kpm;
+  dStatus.textContent = `${kpm} KPM, ${acc}% accuracy. Best at ${clock(dDuration * 1000)}: ${best}. Return to go again.`;
+  dLed.className = "led ok";
+  place();
+}
+function dirKey(e) {
+  if (e.key === "Enter") { e.preventDefault(); spin(document.getElementById("dRestart")); return newRun(); }
+  const d = dirOf(e);
+  if (d < 0) return;
+  e.preventDefault();
+  if (dDone) return;
+  if (!dStart) {
+    dStart = performance.now();
+    dStatus.textContent = "Going…"; dLed.className = "led on";
+    dTimer = setInterval(() => { renderDirStats(); if (dLeft() === 0) dFinish(); }, 100);
+  }
+  const ok = d === seq[at];
+  pressPad(d, ok);
+  if (ok) {
+    at++;
+    if (seq.length - at < 30) more(30);
+    place();
+  } else {
+    errors++;
+    const cap = stripEl.children[at];
+    cap.classList.remove("miss"); void cap.offsetWidth; cap.classList.add("miss");
+  }
+  renderDirStats();
+}
+document.getElementById("dRestart").addEventListener("click", e => { spin(e.currentTarget); newRun(); e.currentTarget.blur(); });
+segment("dDuration", String(dDuration), v => { dDuration = +v; store.set("dDuration", v); newRun(); });
+showKeysEl.addEventListener("change", () => { store.set("showKeys", showKeysEl.checked); relabel(); showKeysEl.blur(); });
+window.addEventListener("resize", place);
+
+/* ---------- Pointer halves drill ---------- */
+// Positions are fractions of the screen. Distances use a 16 x 10 screen so circles stay round.
+const W = 16, H = 10;
+const LEVELS = { easy: 0.6, normal: 0.32, hard: 0.16 }; // target radius
+const screenEl = document.getElementById("screen");
+const areaEl = document.getElementById("area"), ptrEl = document.getElementById("pointer"), overEl = document.getElementById("pOver");
+const pStatus = document.getElementById("pStatus"), pLed = document.getElementById("pLed");
+let level = store.get("level", "normal"), pDuration = +store.get("pDuration", "60");
+let area, ptr, target, targetEl, par, used, moved, hits, misses, extraKeys, pStart, pDone, pTimer;
+
+const R = () => LEVELS[level];
+function fullArea() { return { x: 0, y: 0, w: 1, h: 1 }; }
+function newGame() {
+  clearInterval(pTimer);
+  hits = 0; misses = 0; extraKeys = 0; pStart = 0; pDone = false;
+  overEl.hidden = true;
+  pStatus.textContent = "Press a key to start"; pLed.className = "led";
+  newTarget();
+}
+function newTarget() {
+  const m = 0.04;
+  target = { x: m + Math.random() * (1 - 2 * m), y: m + Math.random() * (1 - 2 * m) };
+  area = fullArea(); ptr = { x: 0.5, y: 0.5 }; used = 0; moved = false;
+  par = fewestKeys(target);
+  targetEl?.remove();
+  targetEl = document.createElement("div");
+  targetEl.className = "target";
+  screenEl.prepend(targetEl);
+  layoutPointer(); renderPtrStats();
+}
+// Halving toward the target on each axis, then the cheapest mix that lands within reach.
+function fewestKeys(t) {
+  const errs = (pos, size) => {
+    const out = []; let lo = 0, hi = 1;
+    for (let n = 0; n <= 16; n++) {
+      out.push(Math.abs((lo + hi) / 2 - pos) * size);
+      const mid = (lo + hi) / 2; if (pos < mid) hi = mid; else lo = mid;
+    }
+    return out;
+  };
+  const ex = errs(t.x, W), ey = errs(t.y, H), r = R();
+  let best = Infinity;
+  ex.forEach((a, i) => ey.forEach((b, j) => { if (a * a + b * b <= r * r) best = Math.min(best, i + j); }));
+  return best;
+}
+const pct = v => (v * 100) + "%";
+function layoutPointer() {
+  if (!area) return;
+  Object.assign(areaEl.style, { left: pct(area.x), top: pct(area.y), width: pct(area.w), height: pct(area.h) });
+  areaEl.classList.toggle("full", area.w === 1 && area.h === 1);
+  const d = (2 * R() / W) * 100;
+  Object.assign(targetEl.style, { left: pct(target.x), top: pct(target.y), width: d + "%", aspectRatio: "1" });
+  Object.assign(ptrEl.style, { left: pct(ptr.x), top: pct(ptr.y) });
+}
+function pLeft() { return pStart ? Math.max(0, pDuration * 1000 - (performance.now() - pStart)) : pDuration * 1000; }
+function renderPtrStats() {
+  const ms = pLeft();
+  document.getElementById("pTime").textContent = clock(ms);
+  document.getElementById("pClock").classList.toggle("urgent", pStart > 0 && !pDone && ms <= 5000);
+  document.getElementById("pHits").textContent = hits;
+  document.getElementById("pKeys").textContent = used;
+  document.getElementById("pPar").textContent = "/ " + par;
+}
+function ring() {
+  const r = document.createElement("div");
+  r.className = "ring";
+  Object.assign(r.style, { left: pct(target.x), top: pct(target.y), width: targetEl.style.width, aspectRatio: "1" });
+  screenEl.append(r);
+  r.addEventListener("animationend", () => r.remove());
+  setTimeout(() => r.remove(), 600); // reduced motion skips the animation
+}
+function pFinish() {
+  pDone = true; clearInterval(pTimer);
+  const acc = hits + misses ? Math.round(100 * hits / (hits + misses)) : 0;
+  const extra = hits ? (extraKeys / hits).toFixed(1) : "–";
+  const bestKey = `bestHits-${level}-${pDuration}`;
+  const best = Math.max(hits, store.get(bestKey, 0));
+  store.set(bestKey, best);
+  renderPtrStats();
+  overEl.innerHTML = `<div><b>${hits} hits</b>${acc}% on target · ${extra} extra keys a hit<br>Best on ${level} at ${clock(pDuration * 1000)}: ${best}<br><br>Return to go again</div>`;
+  overEl.hidden = false;
+  pStatus.textContent = "Time's up."; pLed.className = "led ok";
+}
+function ptrKey(e) {
+  if (pDone) { if (e.key === "Enter") { e.preventDefault(); spin(document.getElementById("pRestart")); newGame(); } return; }
+  const d = dirOf(e);
+  const isKey = d >= 0 || e.key === " " || e.key === "Enter";
+  if (!isKey) return;
+  e.preventDefault();
+  if (e.key === "Enter" && !moved) return;
+  if (!pStart) {
+    pStart = performance.now();
+    pStatus.textContent = "Going…"; pLed.className = "led on";
+    pTimer = setInterval(() => { renderPtrStats(); if (pLeft() === 0) pFinish(); }, 100);
+  }
+  if (e.key === " ") { area = fullArea(); ptr = { x: 0.5, y: 0.5 }; used++; layoutPointer(); return renderPtrStats(); }
+  if (e.key === "Enter") {
+    const dx = (ptr.x - target.x) * W, dy = (ptr.y - target.y) * H;
+    if (dx * dx + dy * dy <= R() * R()) {
+      ring(); hits++; extraKeys += Math.max(0, used - par);
+      newTarget();
+    } else {
+      misses++; area = fullArea();
+      screenEl.classList.remove("shake"); void screenEl.offsetWidth; screenEl.classList.add("shake");
+      layoutPointer(); renderPtrStats();
+    }
+    return;
+  }
+  pressPad(d);
+  const a = { ...area };
+  if (d === 0) a.w /= 2;
+  if (d === 3) { a.w /= 2; a.x += a.w; }
+  if (d === 2) a.h /= 2;
+  if (d === 1) { a.h /= 2; a.y += a.h; }
+  area = a; ptr = { x: a.x + a.w / 2, y: a.y + a.h / 2 }; used++; moved = true;
+  layoutPointer(); renderPtrStats();
+}
+document.getElementById("pRestart").addEventListener("click", e => { spin(e.currentTarget); newGame(); e.currentTarget.blur(); });
+segment("pLevel", level, v => { level = v; store.set("level", v); newGame(); });
+segment("pDuration", String(pDuration), v => { pDuration = +v; store.set("pDuration", v); newGame(); });
+
+document.addEventListener("keydown", e => {
+  if (e.target instanceof Element && e.target.matches("input[type=text]") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (tab === "dirs") dirKey(e); else ptrKey(e);
+});
+
+keysChanged();
+newRun();
+newGame();
+showTab(tab);
+</script>
+</body>
+</html>

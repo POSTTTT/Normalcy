@@ -367,9 +367,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             panel.setFrame(NSRect(x: v.midX - 300, y: v.minY, width: 600, height: v.height), display: false)
             preview.setFrame(v, display: false) // same area window commands fill
         }
-        preview.orderFront(nil) // first, so the bar stays above it
         panel.makeKeyAndOrderFront(nil)
         DispatchQueue.main.async {
+            // A pass later, so it has redrawn without the last command's box; below the bar.
+            self.preview.order(.below, relativeTo: self.panel.windowNumber)
             self.palette.focusToken += 1
             withAnimation(.uiEaseOut(0.15)) { self.palette.visible = true }
         }
@@ -379,6 +380,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func hide() {
         panel.orderOut(nil)
         preview.orderOut(nil)
+        // Drop the last command's preview box now, unanimated, so it never shows on the next open.
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { palette.text = "" }
         palette.visible = false
     }
 

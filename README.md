@@ -11,7 +11,7 @@ short commands for apps, desktops, tabs and windows, without touching the mouse.
 
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-black)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-F05138?logo=swift&logoColor=white)](https://swift.org)
-[![Keys](https://img.shields.io/badge/keys-h%20j%20k%20l-4C6EF5)](#cheatsheet)
+[![Keys](https://img.shields.io/badge/keys-h%20j%20k%20l-4C6EF5)](#using-it)
 
 </div>
 
@@ -29,12 +29,6 @@ short commands for apps, desktops, tabs and windows, without touching the mouse.
 - **Keep going.** Shift+Return runs a command and keeps the bar open for the next one.
 - **Stays out of the way.** A menu bar app with no Dock icon. The bar appears on
   the hotkey and disappears when you're done.
-
-## Cheatsheet
-
-[![Normalcy cheatsheet](docs/cheatsheet.png)](docs/cheatsheet.html)
-
-Every default trigger on one page. Open [`docs/cheatsheet.html`](docs/cheatsheet.html) in a browser and print it (A4 landscape) to keep it by your keyboard.
 
 ## Requirements
 
@@ -59,8 +53,8 @@ Normalcy lives in the menu bar as a ⌘ icon. On first launch macOS asks for:
 
 ## Using it
 
-Press **Option+Space**, type a command, press **Return**. Every command and key is
-on the [cheatsheet](#cheatsheet).
+Press **Option+Space**, type a command, press **Return**. The bar lists every
+command with its trigger, and Settings › Commands is where you rename them.
 
 - **Shift+Return** runs a command and keeps the bar open for the next one.
 - Return on a highlighted command that needs more (like `o`) fills in its

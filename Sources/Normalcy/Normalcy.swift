@@ -289,8 +289,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         palette.submitContinuing = { [weak self] text in
             guard let self, let cmd = Command.parse(text, Store.shared.defs) else { return NSSound.beep() }
-            // Resizing by direction and scrolling go in small steps, so keep "re " / "s " ready.
-            let stepping = switch cmd { case .resizeEdge, .scroll: true; default: false }
+            // Scrolling goes in small steps, so keep "s " ready; everything else starts blank.
+            let stepping = switch cmd { case .scroll: true; default: false }
             let again = stepping ? (text.split(separator: " ").first.map(String.init) ?? "") + " " : ""
             // The bar stays up. Commands that activate an app take focus from it, so it
             // ignores losing focus until it takes it back once the command has landed.

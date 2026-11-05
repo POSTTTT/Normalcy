@@ -6,6 +6,7 @@ enum Action: String, CaseIterable {
     case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
     case grow, shrink, resize
     case scroll
+    case pointer, pointerStep
     case settings
 
     // Left, down, up, right: the direction keys are these commands' triggers.
@@ -35,6 +36,8 @@ enum Action: String, CaseIterable {
         case .shrink: "-"
         case .resize: "re"
         case .scroll: "s"
+        case .pointer: "mo"
+        case .pointerStep: "ms"
         case .settings: "set"
         }
     }
@@ -63,6 +66,8 @@ enum Action: String, CaseIterable {
         case .shrink: "Make Smaller"
         case .resize: "Resize by Direction"
         case .scroll: "Scroll"
+        case .pointer: "Pointer by Halves"
+        case .pointerStep: "Pointer by Steps"
         case .settings: "Settings"
         }
     }
@@ -91,6 +96,8 @@ enum Action: String, CaseIterable {
         case .shrink: "arrow.down.right.and.arrow.up.left"
         case .resize: "arrow.up.and.down.and.arrow.left.and.right"
         case .scroll: "scroll"
+        case .pointer: "cursorarrow.rays"
+        case .pointerStep: "cursorarrow.motionlines"
         case .settings: "gearshape"
         }
     }
@@ -109,6 +116,7 @@ enum Action: String, CaseIterable {
         case .full, .center: "Fill & Center"
         case .grow, .shrink, .resize: "Resize"
         case .scroll: "Scroll"
+        case .pointer, .pointerStep: "Pointer"
         case .settings: "Other"
         }
     }
@@ -122,6 +130,7 @@ enum Action: String, CaseIterable {
         case .tab: "<left> <right> <up> <down> f c"
         case .resize: "<left> <right> <up> <down>"
         case .scroll: "<down> <up> <left> <right>"
+        case .pointer, .pointerStep: "<left> <down> <up> <right>"
         default: nil
         }
     }
@@ -134,6 +143,7 @@ enum Action: String, CaseIterable {
         case .desktop, .move: "number or direction"
         case .tab: "position"
         case .resize, .scroll: "direction"
+        case .pointer, .pointerStep: "direction, Return clicks"
         default: nil
         }
     }
@@ -149,6 +159,8 @@ enum Action: String, CaseIterable {
         case .desktop, .move: "<trigger> 2, or <trigger> <left> / <trigger> <right> for left / right"
         case .tab: "<trigger>, or <trigger> <left> to put the new window on the left"
         case .scroll: "<trigger>, then <down> <up> <left> <right> scroll as you press them; Esc to stop"
+        case .pointer: "<trigger>, then each of <left> <down> <up> <right> keeps that half of the screen and puts the pointer in its middle; uppercase nudges, Space starts over from the center. Return clicks, r then Return right-clicks, 2 then Return double-clicks"
+        case .pointerStep: "<trigger>, then <left> <down> <up> <right> move the pointer by the step set below, uppercase 10 points. Return clicks, r then Return right-clicks, 2 then Return double-clicks"
         case .resize: "<trigger> <left> <right> <up> <down> moves the window's free edge that way: its right or bottom edge, or the left or top edge of a window against the right or bottom of the screen"
         default: nil
         }
@@ -251,6 +263,12 @@ final class Store: ObservableObject {
     @Published var growPercent = UserDefaults.standard.object(forKey: "growPercent") as? Int ?? 10 {
         didSet { UserDefaults.standard.set(growPercent, forKey: "growPercent") }
     }
+    @Published var pointerPreview = UserDefaults.standard.object(forKey: "pointerPreview") as? Bool ?? true { // mo's area box
+        didSet { UserDefaults.standard.set(pointerPreview, forKey: "pointerPreview") }
+    }
+    @Published var pointerStep = UserDefaults.standard.object(forKey: "pointerStep") as? Int ?? 50 { // points, for ms
+        didSet { UserDefaults.standard.set(pointerStep, forKey: "pointerStep") }
+    }
     @Published var edgePercent = UserDefaults.standard.object(forKey: "edgePercent") as? Int ?? 5 {
         didSet { UserDefaults.standard.set(edgePercent, forKey: "edgePercent") }
     }
@@ -344,9 +362,25 @@ struct GeneralSettings: View {
 
 // Commands that aren't about window position or size.
 struct CommandSettings: View {
+    @ObservedObject var store = Store.shared
+
     var body: some View {
-        CommandGroups(groups: ["Apps", "Desktops & Tabs", "Scroll", "Other"],
-                      note: "The key cap is what you type. Click it to change it; switch a command off to hide it.")
+        CommandGroups(groups: ["Apps", "Desktops & Tabs", "Scroll", "Pointer", "Other"],
+                      note: "The key cap is what you type. Click it to change it; switch a command off to hide it.") {
+            EmptyView()
+        } after: {
+            Section {
+                Stepper(value: $store.pointerStep, in: 10...400, step: 10) {
+                    LabeledContent("Each direction key after ms", value: "\(store.pointerStep) points")
+                }
+                Toggle("Show the area left after mo", isOn: $store.pointerPreview)
+            } header: {
+                Text("Pointer")
+            } footer: {
+                Text("Uppercase keys always move 10 points, for the last bit.")
+                    .settingsFooter()
+            }
+        }
     }
 }
 

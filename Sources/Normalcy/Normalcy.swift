@@ -26,6 +26,9 @@ enum Command: Equatable {
     case resize(Int) // steps bigger (or smaller, if negative) around the window's center
     case resizeEdge(CGSize) // steps to move the right and bottom edges out (or in, if negative)
     case scroll(CGSize) // steps right and down (negative: left and up)
+    case pointerTo(CGPoint) // global coordinates, top-left origin
+    case pointerBy(CGSize) // points right and down
+    case click(right: Bool, count: Int)
     case settings
 
     static let digitKeys: [CGKeyCode] = [18, 19, 20, 21, 23, 22, 26, 28, 25] // kVK_ANSI_1...9
@@ -107,6 +110,14 @@ enum Command: Equatable {
         case .shrink: return .resize(-1)
         case .resize: return directionSteps(arg, defs).map { .resizeEdge($0) }
         case .scroll: return directionSteps(arg, defs).map { .scroll($0) }
+        case .pointer, .pointerStep:
+            // The pointer moves as keys are pressed; Return clicks: "mo" left, "mo r" right, "mo 2" double.
+            switch arg {
+            case "": return .click(right: false, count: 1)
+            case "r": return .click(right: true, count: 1)
+            case "2": return .click(right: false, count: 2)
+            default: return nil
+            }
         case .settings: return .settings
         }
     }
@@ -289,8 +300,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         palette.submitContinuing = { [weak self] text in
             guard let self, let cmd = Command.parse(text, Store.shared.defs) else { return NSSound.beep() }
-            // Scrolling goes in small steps, so keep "s " ready; everything else starts blank.
-            let stepping = switch cmd { case .scroll: true; default: false }
+            // Scrolling and pointing go in small steps, so keep "s " / "mo " ready; the rest starts blank.
+            let stepping = switch cmd { case .scroll, .click: true; default: false }
             let again = stepping ? (text.split(separator: " ").first.map(String.init) ?? "") + " " : ""
             // The bar stays up. Commands that activate an app take focus from it, so it
             // ignores losing focus until it takes it back once the command has landed.
@@ -491,6 +502,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             resizeFocused(cmd)
         case .scroll(let steps):
             scroll(steps)
+        case .pointerTo(let p):
+            postMouse(.mouseMoved, p)
+        case .pointerBy(let d):
+            let p = CGEvent(source: nil)?.location ?? .zero
+            postMouse(.mouseMoved, CGPoint(x: p.x + d.width, y: p.y + d.height))
+        case .click(let right, let count):
+            click(right: right, count: count)
         case .tabToWindow(let layout):
             // The bar took key focus from the app's window. Hand it back first, or Safari
             // applies the command to a different tab than the one showing.
@@ -565,6 +583,25 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.postMouse(.leftMouseUp, grab)
                 CGWarpMouseCursorPosition(restore)
             }
+        }
+    }
+
+    // Clicks where the pointer is. The bar may be under it (Shift+Return keeps it up), so clicks
+    // pass through it for a moment.
+    func click(right: Bool, count: Int) {
+        panel.ignoresMouseEvents = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            let p = CGEvent(source: nil)?.location ?? .zero
+            let (down, up, button): (CGEventType, CGEventType, CGMouseButton) =
+                right ? (.rightMouseDown, .rightMouseUp, .right) : (.leftMouseDown, .leftMouseUp, .left)
+            for n in 1...count {
+                for type in [down, up] {
+                    let e = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: p, mouseButton: button)
+                    e?.setIntegerValueField(.mouseEventClickState, value: Int64(n)) // 2 makes it a double-click
+                    e?.post(tap: .cghidEventTap)
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.panel.ignoresMouseEvents = false }
         }
     }
 
@@ -1100,6 +1137,35 @@ enum Main {
         precondition(sp.typeDirection("j") && sp.text == "s " && scrolled.count == 4) // no space needed
         sp.text = "o "
         precondition(!sp.scrollKey("j")) // only after the scroll command
+        // Pointer: "mo " halves the screen per key, "ms " steps, uppercase nudges, Return clicks.
+        precondition(Command.parse("mo", d) == .click(right: false, count: 1) && Command.parse("ms r", d) == .click(right: true, count: 1))
+        precondition(Command.parse("mo 2", d) == .click(right: false, count: 2) && Command.parse("mo x", d) == nil)
+        let pt = Palette()
+        pt.defs = { d }
+        pt.pointerStep = { 50 }
+        pt.pointerPreview = { true }
+        var moved: [Command] = []
+        pt.live = { moved.append($0) }
+        pt.screen = CGRect(x: 0, y: 100, width: 1000, height: 800)
+        pt.text = "mo"
+        precondition(pt.typeDirection("l") && pt.text == "mo " && pt.pointerArea == CGRect(x: 0.5, y: 0, width: 0.5, height: 1))
+        precondition(moved.last == .pointerTo(CGPoint(x: 750, y: 500)))
+        precondition(pt.pointerKey("k") && pt.pointerArea == CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5))
+        precondition(pt.layoutPreview == pt.pointerArea)
+        pt.pointerPreview = { false }
+        precondition(pt.layoutPreview == nil)
+        pt.pointerPreview = { true }
+        precondition(pt.pointerKey("H") && moved.last == .pointerBy(CGSize(width: -10, height: 0)))
+        precondition(pt.pointerKey(" ") && pt.text == "mo " && pt.pointerArea == CGRect(x: 0, y: 0, width: 1, height: 1))
+        precondition(moved.last == .pointerTo(CGPoint(x: 500, y: 500)))
+        precondition(pt.pointerKey("k") && pt.pointerArea == CGRect(x: 0, y: 0, width: 1, height: 0.5))
+        pt.enter()
+        precondition(pt.pointerArea == CGRect(x: 0, y: 0, width: 1, height: 1))
+        pt.text = "ms "
+        precondition(pt.pointerKey("j") && moved.last == .pointerBy(CGSize(width: 0, height: 50)))
+        precondition(!pt.pointerKey("x"))
+        pt.text = "s "
+        precondition(!pt.pointerKey("j")) // only after a pointer command
         // Resizes preview where the window will go.
         let rp = Palette()
         rp.defs = { d }

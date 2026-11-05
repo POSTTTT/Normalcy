@@ -30,6 +30,10 @@ final class Palette: ObservableObject {
     var window: CGRect? // target window and screen, AX coordinates, captured when the bar opens
     var screen: CGRect?
     var steps: () -> ResizeSteps = { Store.shared.resizeSteps }
+    var pointerStep: () -> CGFloat = { CGFloat(Store.shared.pointerStep) } // points per key after "ms "
+    var pointerPreview: () -> Bool = { Store.shared.pointerPreview } // box around what's left after "mo "
+    // What's left of the screen after "mo " halvings, as fractions; whole again on Return.
+    @Published var pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1)
 
     // The desktop-related command being typed or highlighted, if any.
     var desktopCommand: CommandDef? {
@@ -42,6 +46,7 @@ final class Palette: ObservableObject {
     // Desktop number the typed argument points at ("2", or "h"/"l" relative to the current one).
     // Screen area (fractions, top-left origin) the typed or highlighted window command would use.
     var layoutPreview: CGRect? {
+        if pointerMode == .pointer { return pointerPreview() && (pointerArea.width < 1 || pointerArea.height < 1) ? pointerArea : nil }
         switch Command.parse(text, defs()) {
         case .layout(let r): return r
         case .tabToWindow(let r): return r
@@ -124,6 +129,45 @@ final class Palette: ObservableObject {
         return true
     }
 
+    // The pointer command typed with a space after it, ready for direction keys.
+    var pointerMode: Action? {
+        let words = text.split(separator: " ")
+        guard words.count == 1, text.hasSuffix(" "),
+              let a = Command.lookup(String(words[0]), in: defs()).flatMap({ Action(rawValue: $0.id) }),
+              a == .pointer || a == .pointerStep else { return nil }
+        return a
+    }
+
+    // Pointer mode: a direction key moves the pointer right away and is never typed. "mo " keeps
+    // that half of the area left and puts the pointer in its middle; "ms " steps as set in Settings.
+    // Uppercase nudges 10 points in either; Space gives "mo " the whole screen again, pointer centered.
+    // Returns false when the key should be typed as usual.
+    func pointerKey(_ key: String) -> Bool {
+        let lower = key.lowercased()
+        if key == " ", pointerMode == .pointer {
+            pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1)
+            if let s = screen { live(.pointerTo(CGPoint(x: s.midX, y: s.midY))) } // shows the reset
+            return true
+        }
+        guard let mode = pointerMode, let dir = Command.direction(lower, in: defs()),
+              let step = Command.directionSteps(lower, defs()) else { return false }
+        if key != lower || mode == .pointerStep {
+            let n: CGFloat = key != lower ? 10 : pointerStep()
+            live(.pointerBy(CGSize(width: step.width * n, height: step.height * n)))
+            return true
+        }
+        var a = pointerArea
+        switch dir {
+        case .left: a.size.width /= 2
+        case .right: a.size.width /= 2; a.origin.x += a.width
+        case .top: a.size.height /= 2
+        default: a.size.height /= 2; a.origin.y += a.height
+        }
+        pointerArea = a
+        if let s = screen { live(.pointerTo(CGPoint(x: s.minX + a.midX * s.width, y: s.minY + a.midY * s.height))) }
+        return true
+    }
+
     // Arrow keys type ← ↓ ↑ →, which work like h j k l.
     func typeArrow(_ arrow: String) {
         if !typeDirection(arrow) { text += arrow }
@@ -135,11 +179,11 @@ final class Palette: ObservableObject {
     func typeDirection(_ key: String) -> Bool {
         let defs = defs()
         guard Command.direction(key, in: defs) != nil else { return false }
-        if scrollKey(key) { return true }
+        if scrollKey(key) || pointerKey(key) { return true }
         let takesArg = defs.contains { $0.enabled && $0.trigger == text && Action(rawValue: $0.id)?.argHint != nil }
         guard takesArg, !defs.contains(where: { $0.enabled && $0.trigger.hasPrefix(text + key) }) else { return false }
         text += " "
-        if !scrollKey(key) { text += key }
+        if !scrollKey(key), !pointerKey(key) { text += key }
         return true
     }
 
@@ -195,6 +239,7 @@ final class Palette: ObservableObject {
     // Shift+Enter does the same but keeps going: the bar comes back for another command.
     func enter(continuing: Bool = false) {
         let run = continuing ? submitContinuing : submit
+        defer { pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1) } // the next "mo " starts from the whole screen
         // Picking from the app list switches to the highlighted app.
         if let list = appMatches, list.indices.contains(selected), let head = text.split(separator: " ").first {
             return run(head + " " + list[selected].name)
@@ -274,6 +319,7 @@ struct PaletteView: View {
                 case "p" where press.modifiers.contains(.control): model.move(-1)
                 case .return where press.modifiers.contains(.shift): model.enter(continuing: true)
                 case .escape: model.escape()
+                case _ where press.modifiers.subtracting(.shift).isEmpty && model.pointerKey(press.characters): break // H J K L nudge
                 case _ where press.modifiers.isEmpty && model.typeDirection(press.characters): break
                 case "u" where press.modifiers.contains(.control): model.text = "" // discard, like a shell
                 case "w" where press.modifiers.contains(.control): model.deleteWord()

@@ -216,6 +216,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         ) { [weak self] _ in
             // Let the switch animation finish before capturing.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self?.snapshotDesktop() }
+            // Shift+Enter desktop switch: take focus back after the new desktop's app has taken it,
+            // or the bar loses focus right after and hides. Each further switch pushes this back.
+            if self?.continuing == true { self?.scheduleRefocus(after: 0.3) }
         }
         snapshotDesktop()
     }
@@ -295,12 +298,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             palette.text = again
             run(cmd)
             // shortcut: fixed delays, not completion callbacks; lengthen if focus comes back too early.
+            // Desktop switches come back once the switch lands (see the space-change observer);
+            // their delay is only the fallback for when no switch happens, like "d l" on the last desktop.
             let wait: Double = switch cmd {
-            case .ctrlKey, .moveToDesktop: 0.7
+            case .ctrlKey, .moveToDesktop: 1.5
             case .tabToWindow, .open: 0.6
             default: 0.2
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.refocus() }
+            scheduleRefocus(after: wait)
         }
         palette.cancel = { [weak self] in self?.hide() }
         palette.live = { [weak self] in self?.run($0) }
@@ -435,6 +440,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func captureWindow() {
         palette.window = focusedWindow().flatMap(axFrame)
         palette.screen = Self.screenBounds()
+    }
+
+    var pendingRefocus: DispatchWorkItem?
+    func scheduleRefocus(after delay: Double) {
+        pendingRefocus?.cancel()
+        let w = DispatchWorkItem { [weak self] in self?.refocus() }
+        pendingRefocus = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: w)
     }
 
     func refocus() {

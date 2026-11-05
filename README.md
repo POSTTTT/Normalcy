@@ -55,6 +55,7 @@ Normalcy lives in the menu bar as a ⌘ icon. On first launch macOS asks for:
 
 Press **Option+Space**, type a command, press **Return**. The bar lists every
 command with its trigger, and Settings › Commands is where you rename them.
+[`docs/commands.md`](docs/commands.md) describes each command and what to type after it.
 
 - **Shift+Return** runs a command and keeps the bar open for the next one.
 - Return on a highlighted command that needs more (like `o`) fills in its
@@ -71,7 +72,7 @@ Open Settings from the ⌘ menu bar icon or with `set`. Changes save immediately
 | Tab | What's there |
 | --- | --- |
 | **General** | The hotkey. The bar's style: *Command bar* (a text field with the list under it) or *Minimal* (what you type as key caps, at the top, center or bottom of the screen). Whether to show the command list, and its layout |
-| **Commands** | App, desktop, tab and scroll commands |
+| **Commands** | App, desktop, tab, scroll and pointer commands, and the pointer step |
 | **Windows** | The direction keys (H J K L, W A S D, I J K L or your own), the window commands, and how far `+` `-` and `re` resize |
 | **Keys** | The fixed keys in the command bar, for reference |
 

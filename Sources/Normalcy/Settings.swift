@@ -149,7 +149,7 @@ enum Action: String, CaseIterable {
         case .desktop, .move: "<trigger> 2, or <trigger> <left> / <trigger> <right> for left / right"
         case .tab: "<trigger>, or <trigger> <left> to put the new window on the left"
         case .scroll: "<trigger>, then <down> <up> <left> <right> scroll as you press them; Esc to stop"
-        case .resize: "<trigger> <right> wider, <trigger> <left> narrower, <trigger> <down> taller, <trigger> <up> shorter"
+        case .resize: "<trigger> <left> <right> <up> <down> moves the window's free edge that way: its right or bottom edge, or the left or top edge of a window against the right or bottom of the screen"
         default: nil
         }
     }

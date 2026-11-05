@@ -779,9 +779,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     // Where a resize command puts a window, kept within the screen. Steps are from Settings:
-    // .resize scales the window by `steps.scale` per step around its center; .resizeEdge moves the
-    // right and bottom edges by `steps.edge` of the screen per step, keeping the top-left corner
-    // unless the window would leave the screen.
+    // .resize scales the window by `steps.scale` per step around its center; .resizeEdge moves an
+    // edge by `steps.edge` of the screen per step, the way typed: the right and bottom edges, or the
+    // left / top edge of a window against the right / bottom of the screen, like dragging the line
+    // between two windows.
     static func resized(_ frame: CGRect, _ cmd: Command, bounds: CGRect, steps: ResizeSteps) -> CGRect? {
         switch cmd {
         case .resize(let n):
@@ -789,10 +790,22 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let size = CGSize(width: min(frame.width * scale, bounds.width), height: min(frame.height * scale, bounds.height))
             return CGRect(origin: center(size, in: frame, bounds: bounds), size: size)
         case .resizeEdge(let d):
-            let size = CGSize(width: min(max(frame.width + d.width * steps.edge * bounds.width, 100), bounds.width),
-                              height: min(max(frame.height + d.height * steps.edge * bounds.height, 100), bounds.height))
-            let origin = CGPoint(x: min(frame.minX, bounds.maxX - size.width), y: min(frame.minY, bounds.maxY - size.height))
-            return CGRect(origin: origin, size: size)
+            // One axis: new (start, end) of the window between the screen's bStart and bEnd.
+            func edges(_ start: CGFloat, _ end: CGFloat, _ bStart: CGFloat, _ bEnd: CGFloat, _ by: CGFloat) -> (CGFloat, CGFloat) {
+                let tol: CGFloat = 20, atStart = start < bStart + tol, atEnd = end > bEnd - tol
+                // Against both sides: pull in the edge on the side typed away from ("re l" on a full
+                // window frees its left edge), so it shrinks toward the other side.
+                if atStart, atEnd, by > 0 { return (min(start + by, end - 100), end) }
+                if atStart, atEnd, by < 0 { return (start, max(end + by, start + 100)) }
+                // Against the far side only: the near edge is the free one, so it moves.
+                if atEnd, !atStart { return (min(max(start + by, bStart), end - 100), end) }
+                let size = min(max(end - start + by, 100), bEnd - bStart)
+                let s = min(start, bEnd - size)
+                return (s, s + size)
+            }
+            let x = edges(frame.minX, frame.maxX, bounds.minX, bounds.maxX, d.width * steps.edge * bounds.width)
+            let y = edges(frame.minY, frame.maxY, bounds.minY, bounds.maxY, d.height * steps.edge * bounds.height)
+            return CGRect(x: x.0, y: y.0, width: x.1 - x.0, height: y.1 - y.0)
         default: return nil
         }
     }
@@ -1051,6 +1064,22 @@ enum Main {
         precondition(abs(App.resized(grown, .resize(-1), bounds: unit, steps: steps)!.width - 400) < 0.001)
         precondition(App.resized(CGRect(x: 0, y: 0, width: 400, height: 400), .resizeEdge(CGSize(width: 2, height: 0)),
                                  bounds: unit, steps: steps)!.width == 600)
+        // A window against the right side moves its left edge: h grows it, l shrinks it.
+        let right = CGRect(x: 600, y: 0, width: 400, height: 1000)
+        precondition(App.resized(right, .resizeEdge(CGSize(width: -1, height: 0)), bounds: unit, steps: steps)
+                     == CGRect(x: 500, y: 0, width: 500, height: 1000))
+        precondition(App.resized(right, .resizeEdge(CGSize(width: 2, height: 0)), bounds: unit, steps: steps)
+                     == CGRect(x: 800, y: 0, width: 200, height: 1000))
+        precondition(App.resized(right, .resizeEdge(CGSize(width: 9, height: 0)), bounds: unit, steps: steps)!.width == 100)
+        precondition(App.resized(right, .resizeEdge(CGSize(width: -9, height: 0)), bounds: unit, steps: steps) == unit)
+        // Full screen: l frees the left edge, h the right one; j frees the top.
+        precondition(App.resized(unit, .resizeEdge(CGSize(width: 2, height: 0)), bounds: unit, steps: steps)
+                     == CGRect(x: 200, y: 0, width: 800, height: 1000))
+        precondition(App.resized(unit, .resizeEdge(CGSize(width: -1, height: 1)), bounds: unit, steps: steps)
+                     == CGRect(x: 0, y: 100, width: 900, height: 900))
+        // Against the bottom: k grows it up.
+        precondition(App.resized(CGRect(x: 0, y: 500, width: 400, height: 500), .resizeEdge(CGSize(width: 0, height: -1)),
+                                 bounds: unit, steps: steps) == CGRect(x: 0, y: 400, width: 400, height: 600))
         precondition(Command.parse("re x", d) == nil && Command.parse("re", d) == nil)
         precondition(Command.parse("t +", d) == nil)
         precondition(Command.parse("s j", d) == .scroll(CGSize(width: 0, height: 1)))

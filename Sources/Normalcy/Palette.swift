@@ -124,15 +124,23 @@ final class Palette: ObservableObject {
         return true
     }
 
-    // Arrow keys type ← ↓ ↑ →, which work like h j k l. Right after a command that takes a
-    // direction (t, d, m) they add the space too, so "t" + ← becomes "t ←".
-    func typeArrow(_ letter: String) {
-        if scrollKey(letter) { return }
-        let head = text.trimmingCharacters(in: .whitespaces)
-        let takesArg = defs().contains {
-            $0.enabled && $0.trigger == head && Action(rawValue: $0.id)?.argHint != nil
-        }
-        text = takesArg && !text.hasSuffix(" ") ? head + " " + letter : text + letter
+    // Arrow keys type ← ↓ ↑ →, which work like h j k l.
+    func typeArrow(_ arrow: String) {
+        if !typeDirection(arrow) { text += arrow }
+    }
+
+    // A direction key (arrow or h j k l) right after a command that takes an argument adds the
+    // space too, so "d" + h becomes "d h" and "s" + j scrolls at once. Skipped when the typed
+    // text plus the key starts another trigger. Returns false when the key should be typed as usual.
+    func typeDirection(_ key: String) -> Bool {
+        let defs = defs()
+        guard Command.direction(key, in: defs) != nil else { return false }
+        if scrollKey(key) { return true }
+        let takesArg = defs.contains { $0.enabled && $0.trigger == text && Action(rawValue: $0.id)?.argHint != nil }
+        guard takesArg, !defs.contains(where: { $0.enabled && $0.trigger.hasPrefix(text + key) }) else { return false }
+        text += " "
+        if !scrollKey(key) { text += key }
+        return true
     }
 
     // Arrow glyphs sit cramped in a monospaced font; put a gap beside each arrow inside a block.
@@ -266,7 +274,7 @@ struct PaletteView: View {
                 case "p" where press.modifiers.contains(.control): model.move(-1)
                 case .return where press.modifiers.contains(.shift): model.enter(continuing: true)
                 case .escape: model.escape()
-                case _ where press.modifiers.isEmpty && model.scrollKey(press.characters): break
+                case _ where press.modifiers.isEmpty && model.typeDirection(press.characters): break
                 case "u" where press.modifiers.contains(.control): model.text = "" // discard, like a shell
                 case "w" where press.modifiers.contains(.control): model.deleteWord()
                 default: return .ignored

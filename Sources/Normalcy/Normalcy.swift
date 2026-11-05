@@ -926,6 +926,21 @@ enum Main {
         r.text = "d "
         r.typeArrow("→")
         precondition(r.text == "d →" && Command.parse("d →", d) == .ctrlKey(124))
+        // h j k l add the space too, unless they start another trigger.
+        r.text = "d"
+        precondition(r.typeDirection("h") && r.text == "d h")
+        r.text = "t"
+        precondition(r.typeDirection("h") && r.text == "t h" && !r.typeDirection("x"))
+        r.text = "h"
+        precondition(!r.typeDirection("k")) // "hk" is the top-left corner, typed as usual
+        r.text = ""
+        precondition(!r.typeDirection("h"))
+        var dh = d
+        dh[dh.firstIndex { $0.id == "settings" }!].trigger = "dh"
+        r.defs = { dh }
+        r.text = "d"
+        precondition(!r.typeDirection("h")) // "dh" is a trigger now
+        r.defs = { d }
         precondition(Command.parse("d ↑", d) == nil) // desktops only go left/right
         var renamed = d
         renamed[renamed.firstIndex { $0.id == "left" }!].trigger = "a"
@@ -1034,6 +1049,8 @@ enum Main {
         sp.typeArrow("↑")
         precondition(scrolled.last == .scroll(CGSize(width: 0, height: -1)) && scrolled.count == 3 && sp.text == "s ")
         precondition(!sp.scrollKey("x")) // other keys type as usual
+        sp.text = "s"
+        precondition(sp.typeDirection("j") && sp.text == "s " && scrolled.count == 4) // no space needed
         sp.text = "o "
         precondition(!sp.scrollKey("j")) // only after the scroll command
         // Resizes preview where the window will go.

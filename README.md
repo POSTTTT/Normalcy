@@ -13,6 +13,8 @@ short commands for apps, desktops, tabs and windows, without touching the mouse.
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-F05138?logo=swift&logoColor=white)](https://swift.org)
 [![Keys](https://img.shields.io/badge/keys-h%20j%20k%20l-4C6EF5)](#using-it)
 
+**[Commands](docs/commands.md)** · [Install](#install) · [Using it](#using-it) · [Settings](#settings) · [Scripting](#scripting)
+
 </div>
 
 ```

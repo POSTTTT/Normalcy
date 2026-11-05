@@ -26,3 +26,6 @@ DerivedData/
 
 # Tool working folders
 .impeccable/
+
+# Packaged app (scripts/build-app.sh)
+dist/

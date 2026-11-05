@@ -206,8 +206,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }()
 
     func applicationDidFinishLaunching(_ n: Notification) {
-        // The icon macOS shows for Normalcy, e.g. in alerts and app switchers.
-        NSApp.applicationIconImage = Bundle.module.url(forResource: "AppIcon", withExtension: "png").flatMap(NSImage.init(contentsOf:))
+        // The icon macOS shows for Normalcy, e.g. in alerts and app switchers. Normalcy.app carries
+        // its own (scripts/build-app.sh); Bundle.module is only for swift run, and crashes in an .app.
+        if !Bundle.main.bundlePath.hasSuffix(".app") {
+            NSApp.applicationIconImage = Bundle.module.url(forResource: "AppIcon", withExtension: "png").flatMap(NSImage.init(contentsOf:))
+        }
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
         buildPanel()
         registerHotKey()

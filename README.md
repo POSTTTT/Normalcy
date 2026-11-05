@@ -106,7 +106,11 @@ swift build                              # build
 .build/debug/Normalcy --selftest         # command parser and command bar checks
 .build/debug/Normalcy --desktops         # print the desktops Normalcy can see
 swift scripts/make-icon.swift            # redraw Sources/Normalcy/Resources/AppIcon.png
+scripts/build-app.sh                     # dist/Normalcy.app and a .zip for a release
 ```
+
+`Normalcy.app` is signed ad hoc, with no certificate. A downloaded copy opens with
+right-click › Open the first time, and macOS asks for Accessibility again after each new build.
 
 ### Layout
 

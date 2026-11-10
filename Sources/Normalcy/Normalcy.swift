@@ -213,10 +213,20 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         ])
         w.styleMask.remove(.resizable)
         w.isReleasedWhenClosed = false
+        // Opens on the desktop you're on, instead of switching back to the one it was last on.
+        w.collectionBehavior = .moveToActiveSpace
         return w
     }()
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        // Never shown (Normalcy has no menu bar), but its shortcuts still work: Cmd+W closes Settings.
+        let windowMenu = NSMenu()
+        windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        let item = NSMenuItem()
+        item.submenu = windowMenu
+        let mainMenu = NSMenu()
+        mainMenu.addItem(item)
+        NSApp.mainMenu = mainMenu
         // The icon macOS shows for Normalcy, e.g. in alerts and app switchers. Normalcy.app carries
         // its own (scripts/build-app.sh); Bundle.module is only for swift run, and crashes in an .app.
         if !Bundle.main.bundlePath.hasSuffix(".app") {

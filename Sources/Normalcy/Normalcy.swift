@@ -16,6 +16,7 @@ import SwiftUI
 //   + -            window: 10% bigger / smaller, staying centered
 //   re <h|l|k|j>…  window: narrower / wider / shorter / taller, one step per key
 //   s <j|k|h|l>…   scroll the window down / up / left / right as each key is pressed
+//   cl <label>     click what that label sits on in the front window
 //   set            open settings
 enum Command: Equatable {
     case open(String)
@@ -33,6 +34,7 @@ enum Command: Equatable {
     case pointerTo(CGPoint) // global coordinates, top-left origin
     case pointerBy(CGSize) // points right and down
     case click(right: Bool, count: Int)
+    case clickAt(CGPoint, right: Bool, count: Int) // global coordinates, top-left origin
     case settings
 
     static let digitKeys: [CGKeyCode] = [18, 19, 20, 21, 23, 22, 26, 28, 25] // kVK_ANSI_1...9
@@ -126,6 +128,7 @@ enum Command: Equatable {
             case "2": return .click(right: false, count: 2)
             default: return nil
             }
+        case .hints: return nil // the labels live in the bar; it clicks once one is typed
         case .settings: return .settings
         }
     }
@@ -332,6 +335,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         palette.cancel = { [weak self] in self?.hide() }
         palette.live = { [weak self] in self?.run($0) }
+        palette.loadHints = { [weak self] in self?.clickableFrames() ?? [] }
+        // Next pass: the bar clears its text on hide, and the label was typed inside that text's didSet.
+        palette.clickHint = { [weak self] cmd in DispatchQueue.main.async { self?.hide(); self?.run(cmd) } }
+        // Labels go above the bar, so it doesn't hide the ones under it.
+        palette.$hints.sink { [weak self] hints in
+            guard let self, panel.isVisible else { return }
+            preview.order(hints.isEmpty ? .below : .above, relativeTo: panel.windowNumber)
+        }.store(in: &subs)
         palette.loadPreview = { [weak self] pid in
             Task { @MainActor in
                 if let img = await Snapshot.appWindow(pid) { self?.palette.appPreviews[pid] = img }
@@ -378,6 +389,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func show() {
         target = NSWorkspace.shared.frontmostApplication
+        // Chrome and Electron apps build their accessibility tree only when asked; ask now,
+        // so it's ready by the time "cl " needs it.
+        if let pid = target?.processIdentifier {
+            AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        }
         captureWindow()
         palette.apps = runningApps()
         palette.installed = Self.installedApps()
@@ -521,6 +537,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             postMouse(.mouseMoved, CGPoint(x: p.x + d.width, y: p.y + d.height))
         case .click(let right, let count):
             click(right: right, count: count)
+        case .clickAt(let p, let right, let count):
+            postMouse(.mouseMoved, p)
+            click(right: right, count: count)
         case .tabToWindow(let layout):
             // The bar took key focus from the app's window. Hand it back first, or Safari
             // applies the command to a different tab than the one showing.
@@ -641,6 +660,45 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.panel.ignoresMouseEvents = false }
         }
+    }
+
+    static let clickableRoles: Set<String> = [
+        "AXButton", "AXLink", "AXCheckBox", "AXRadioButton", "AXPopUpButton", "AXMenuButton", "AXComboBox",
+        "AXTextField", "AXTextArea", "AXDisclosureTriangle", "AXRow",
+    ]
+
+    // The showing part of each clickable element in the front window, for "cl " labels.
+    // An element is skipped when its middle is scrolled out of view; nothing inside it gets its own label.
+    // shortcut: stops after 5000 elements and doesn't check for things covering it; raise if big pages miss labels.
+    func clickableFrames() -> [CGRect] {
+        guard let win = focusedWindow(), let wf = axFrame(win) else { return [] }
+        let attrs = [kAXRoleAttribute, kAXPositionAttribute, kAXSizeAttribute, kAXChildrenAttribute] as CFArray
+        var out: [CGRect] = [], budget = 5000
+        func walk(_ e: AXUIElement, _ clip: CGRect) {
+            guard budget > 0 else { return }
+            budget -= 1
+            var vals: CFArray?
+            // One round trip for all four, instead of four.
+            guard AXUIElementCopyMultipleAttributeValues(e, attrs, [], &vals) == .success,
+                  let v = vals as? [AnyObject], v.count == 4 else { return }
+            let role = v[0] as? String ?? ""
+            var origin = CGPoint.zero, size = CGSize.zero
+            let hasFrame = CFGetTypeID(v[1]) == AXValueGetTypeID() && CFGetTypeID(v[2]) == AXValueGetTypeID()
+                && AXValueGetValue(v[1] as! AXValue, .cgPoint, &origin) && AXValueGetValue(v[2] as! AXValue, .cgSize, &size)
+            let f = hasFrame ? CGRect(origin: origin, size: size) : nil
+            var clip = clip
+            if role == "AXScrollArea" || role == "AXWebArea", let f { clip = clip.intersection(f) }
+            if clip.isNull || clip.isEmpty { return }
+            if Self.clickableRoles.contains(role) {
+                if let f, f.width >= 4, f.height >= 4, clip.contains(CGPoint(x: f.midX, y: f.midY)) {
+                    out.append(f.intersection(clip))
+                }
+                return
+            }
+            for kid in v[3] as? [AXUIElement] ?? [] { walk(kid, clip) }
+        }
+        walk(win, wf)
+        return out
     }
 
     func postMouse(_ type: CGEventType, _ p: CGPoint) {
@@ -1182,6 +1240,28 @@ enum Main {
         // Pointer: "mo " halves the screen per key, "ms " steps, uppercase nudges, Return clicks.
         precondition(Command.parse("mo", d) == .click(right: false, count: 1) && Command.parse("ms r", d) == .click(right: true, count: 1))
         precondition(Command.parse("mo 2", d) == .click(right: false, count: 2) && Command.parse("mo x", d) == nil)
+        let hp = Palette()
+        hp.defs = { d }
+        var clicked: [Command] = []
+        hp.clickHint = { clicked.append($0) }
+        hp.loadHints = { [CGRect(x: 100, y: 50, width: 20, height: 10), CGRect(x: 0, y: 0, width: 40, height: 20)] }
+        hp.text = "cl "
+        precondition(hp.hints.map(\.label) == ["a", "s"] && hp.hints[0].frame.minY == 0) // top first
+        hp.text = "cl q"
+        precondition(hp.text == "cl " && clicked.isEmpty) // no such label: key dropped
+        hp.text = "cl s"
+        precondition(clicked == [.clickAt(CGPoint(x: 110, y: 55), right: false, count: 1)])
+        hp.text = "cl r"
+        precondition(hp.visibleHints.count == 2) // r is a right-click, not a label
+        hp.text = "cl ra"
+        precondition(clicked.last == .clickAt(CGPoint(x: 20, y: 10), right: true, count: 1))
+        hp.text = "cl 2a"
+        precondition(clicked.last == .clickAt(CGPoint(x: 20, y: 10), right: false, count: 2))
+        hp.text = ""
+        precondition(hp.hints.isEmpty)
+        let many = Palette.labeled((0..<30).map { CGRect(x: CGFloat($0), y: 0, width: 1, height: 1) })
+        precondition(many.count == 30 && many[0].label == "aa" && many[9].label == "sa" && Set(many.map(\.label)).count == 30)
+        precondition(Palette.labeled([]).isEmpty)
         let pt = Palette()
         pt.defs = { d }
         pt.pointerStep = { 50 }

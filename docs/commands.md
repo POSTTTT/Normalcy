@@ -74,6 +74,7 @@ Both modes move the pointer as you press keys, with no Return needed. Uppercase
 | --- | --- | --- | --- |
 | `mo` | Pointer by Halves | directions | Each key keeps that half of what's left of the screen and puts the pointer in its middle, so a few keys reach any spot. A box shows the area left. **Space** starts over with the pointer centered |
 | `ms` | Pointer by Steps | directions | Each key moves the pointer one step, 50 points by default |
+| `cl` | Click by Label | a label | Puts a letter label on every button, link, field and row in the front window. Type a label and it clicks there, no Return needed: `cl a`, `cl sd`. `r` first right-clicks, `2` first double-clicks: `cl ra` |
 
 The step size, whether `mo` shows its box, and the pointer's own direction keys (say W A S D, while windows keep H J K L) are in Settings › Commands › Pointer.
 

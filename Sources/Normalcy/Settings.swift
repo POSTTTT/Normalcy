@@ -6,7 +6,7 @@ enum Action: String, CaseIterable {
     case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
     case grow, shrink, resize
     case scroll
-    case pointer, pointerStep
+    case pointer, pointerStep, hints
     case settings
 
     // Left, down, up, right: the direction keys are these commands' triggers.
@@ -42,6 +42,7 @@ enum Action: String, CaseIterable {
         case .scroll: "s"
         case .pointer: "mo"
         case .pointerStep: "ms"
+        case .hints: "cl"
         case .settings: "set"
         }
     }
@@ -76,6 +77,7 @@ enum Action: String, CaseIterable {
         case .scroll: "Scroll"
         case .pointer: "Pointer by Halves"
         case .pointerStep: "Pointer by Steps"
+        case .hints: "Click by Label"
         case .settings: "Settings"
         }
     }
@@ -110,6 +112,7 @@ enum Action: String, CaseIterable {
         case .scroll: "scroll"
         case .pointer: "cursorarrow.rays"
         case .pointerStep: "cursorarrow.motionlines"
+        case .hints: "cursorarrow.click"
         case .settings: "gearshape"
         }
     }
@@ -128,7 +131,7 @@ enum Action: String, CaseIterable {
         case .full, .center: "Fill & Center"
         case .grow, .shrink, .resize: "Resize"
         case .scroll: "Scroll"
-        case .pointer, .pointerStep: "Pointer"
+        case .pointer, .pointerStep, .hints: "Pointer"
         case .settings: "Other"
         }
     }
@@ -143,6 +146,7 @@ enum Action: String, CaseIterable {
         case .resize: "<left> <right> <up> <down>"
         case .scroll: "<down> <up> <left> <right>"
         case .pointer, .pointerStep: "<left> <down> <up> <right>"
+        case .hints: "label"
         default: nil
         }
     }
@@ -156,6 +160,7 @@ enum Action: String, CaseIterable {
         case .tab: "position"
         case .resize, .scroll: "direction"
         case .pointer, .pointerStep: "direction, Return clicks"
+        case .hints: "label"
         default: nil
         }
     }
@@ -173,6 +178,7 @@ enum Action: String, CaseIterable {
         case .scroll: "<trigger>, then <down> <up> <left> <right> scroll as you press them; Esc to stop"
         case .pointer: "<trigger>, then each of <left> <down> <up> <right> keeps that half of the screen and puts the pointer in its middle; uppercase nudges, Space starts over from the center. Return clicks, r then Return right-clicks, 2 then Return double-clicks"
         case .pointerStep: "<trigger>, then <left> <down> <up> <right> move the pointer by the step set below, uppercase 10 points. Return clicks, r then Return right-clicks, 2 then Return double-clicks"
+        case .hints: "<trigger>, then type the label on what to click; r first right-clicks, 2 first double-clicks"
         case .resize: "<trigger> <left> <right> <up> <down> moves the window's free edge that way: its right or bottom edge, or the left or top edge of a window against the right or bottom of the screen"
         default: nil
         }

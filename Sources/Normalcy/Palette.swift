@@ -1,6 +1,11 @@
 import SwiftUI
 
 // A running app (pid set) for the switch list, or an installed one (path set) for the open list.
+struct Hint: Equatable {
+    var label: String
+    var frame: CGRect // AX coordinates
+}
+
 struct AppItem: Equatable {
     var name: String
     var icon: NSImage?
@@ -12,7 +17,7 @@ final class Palette: ObservableObject {
     // The highlight goes back to the top only when the text really changes: the text field
     // also writes back the same value when the view redraws (e.g. a preview arriving).
     // Any change also gives mo the whole screen again: keys inside mo never change the text.
-    @Published var text = "" { didSet { if text != oldValue { selected = 0; pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1) } } }
+    @Published var text = "" { didSet { if text != oldValue { selected = 0; pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1); updateHints() } } }
     var live: (Command) -> Void = { _ in }
     @Published var apps: [AppItem] = [] // running apps, by name; refreshed when the bar opens
     var installed: [AppItem] = [] // apps in the Applications folders, by name
@@ -37,6 +42,10 @@ final class Palette: ObservableObject {
     // What's left of the screen after "mo " halvings, as fractions; whole again on Return,
     // Space, or any change to the text (Esc, another command, the bar closing).
     @Published var pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1)
+    // After "cl ": a label on each clickable thing in the front window, read once each time "cl " is typed.
+    @Published var hints: [Hint] = []
+    var loadHints: () -> [CGRect] = { [] } // AX coordinates
+    var clickHint: (Command) -> Void = { _ in }
 
     // The desktop-related command being typed or highlighted, if any.
     var desktopCommand: CommandDef? {
@@ -184,6 +193,47 @@ final class Palette: ObservableObject {
         return key.count == 1 ? own.firstIndex(of: Character(key)).map { Action.directions[$0] } : nil
     }
 
+    // What's typed after "cl " toward a label. An "r" or "2" in front makes it a right or double click;
+    // labels never use those keys.
+    var hintInput: (label: String, right: Bool, count: Int)? {
+        let s = text.drop { $0 == " " }
+        guard let sp = s.firstIndex(of: " "),
+              Command.lookup(String(s[..<sp]), in: defs())?.id == Action.hints.rawValue else { return nil }
+        var q = s[s.index(after: sp)...].filter { $0 != " " }.lowercased()
+        let mod = q.first.flatMap { "r2".contains($0) ? $0 : nil }
+        if mod != nil { q.removeFirst() }
+        return (q, mod == "r", mod == "2" ? 2 : 1)
+    }
+
+    var visibleHints: [Hint] { hintInput.map { i in hints.filter { $0.label.hasPrefix(i.label) } } ?? [] }
+
+    // Loads the labels when "cl " starts, clicks once a whole label is typed, and drops a key
+    // that no label starts with.
+    func updateHints() {
+        guard let input = hintInput else { if !hints.isEmpty { hints = [] }; return }
+        if hints.isEmpty {
+            hints = Self.labeled(loadHints())
+            if hints.isEmpty { return NSSound.beep() }
+        }
+        if let hit = hints.first(where: { $0.label == input.label }) {
+            clickHint(.clickAt(CGPoint(x: hit.frame.midX, y: hit.frame.midY), right: input.right, count: input.count))
+        } else if !input.label.isEmpty, visibleHints.isEmpty {
+            NSSound.beep()
+            text.removeLast()
+        }
+    }
+
+    // Home-row keys, one each when they're enough, else two. Top to bottom, then left to right.
+    // shortcut: two letters cap it at 81 labels; add a third when windows need more.
+    static let hintKeys = "asdfghjkl".map(String.init)
+    static func labeled(_ frames: [CGRect]) -> [Hint] {
+        let k = hintKeys
+        let labels = frames.count <= k.count ? k : k.flatMap { a in k.map { a + $0 } }
+        // Rows within 8 points count as one line, so a row of buttons reads left to right.
+        let sorted = frames.sorted { (Int($0.minY / 8), $0.minX) < (Int($1.minY / 8), $1.minX) }
+        return zip(labels, sorted).map { Hint(label: $0, frame: $1) }
+    }
+
     // Arrow keys type ← ↓ ↑ →, which work like h j k l.
     func typeArrow(_ arrow: String) {
         if !typeDirection(arrow) { text += arrow }
@@ -197,6 +247,7 @@ final class Palette: ObservableObject {
         if scrollKey(key) || pointerKey(key) { return true }
         guard let head = defs.first(where: { $0.enabled && $0.trigger == text }).flatMap({ Action(rawValue: $0.id) }) else { return false }
         // mo and ms may have their own direction keys.
+        if head == .hints { return false } // "cl" + h would click label h at once
         let isDirection = head == .pointer || head == .pointerStep ? pointerDirection(key) != nil : Command.direction(key, in: defs) != nil
         guard isDirection, head.argHint != nil, !defs.contains(where: { $0.enabled && $0.trigger.hasPrefix(text + key) }) else { return false }
         text += " "
@@ -632,6 +683,20 @@ struct LayoutPreview: View {
                     .frame(width: g.size.width * r.width - 16, height: g.size.height * r.height - 16)
                     .position(x: g.size.width * r.midX, y: g.size.height * r.midY)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97)))
+            }
+            if let s = model.screen {
+                let typed = model.hintInput?.label.count ?? 0
+                ForEach(model.visibleHints, id: \.label) { h in
+                    // Letters already typed go faint, so the ones still to type stand out.
+                    (Text(h.label.prefix(typed).uppercased()).foregroundColor(.black.opacity(0.4))
+                        + Text(h.label.dropFirst(typed).uppercased()).foregroundColor(.black))
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .padding(.horizontal, 4).padding(.vertical, 1)
+                        .background(Color(red: 1, green: 0.84, blue: 0.2), in: RoundedRectangle(cornerRadius: 4))
+                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.black.opacity(0.35)))
+                        .fixedSize()
+                        .position(x: h.frame.minX - s.minX + 10, y: h.frame.minY - s.minY + 8)
+                }
             }
         }
         // Switching h to l slides the box across (spatial: shows where the window goes).

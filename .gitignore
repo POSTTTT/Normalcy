@@ -29,3 +29,9 @@ DerivedData/
 
 # Packaged app (scripts/build-app.sh)
 dist/
+
+# Signing certificate backups: never commit the private key
+*.p12
+*.pem
+*.key
+*.cer

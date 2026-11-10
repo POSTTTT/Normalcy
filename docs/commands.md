@@ -27,6 +27,8 @@ then `h` gives `d h`.
 | `d` | Go to Desktop | `1`–`9`, `h` or `l` | Goes to that desktop, or the one to the left or right: `d 2`, `d l` |
 | `m` | Move Window to Desktop | `1`–`9`, `h` or `l` | Takes the front window to that desktop: `m 3`, `m h` |
 | `t` | Move Tab to New Window | optional: a window position | Moves the current tab out into its own window. Add a position to place it: `t h` (left half), `t l3`, `t hk`, `t f` |
+| `tn` | Next Tab | none | Shows the next tab in the front app (presses Cmd+Shift+]) |
+| `tp` | Previous Tab | none | Shows the previous tab in the front app (presses Cmd+Shift+[) |
 
 ## Window position
 

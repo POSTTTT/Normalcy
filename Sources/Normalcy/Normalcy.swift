@@ -633,6 +633,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 for type in [down, up] {
                     let e = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: p, mouseButton: button)
                     e?.setIntegerValueField(.mouseEventClickState, value: Int64(n)) // 2 makes it a double-click
+                    // A plain click, even with Shift still down from the last key (a capital label, or
+                    // Shift+Return): Safari takes Shift+click on a link as "Add to Reading List".
+                    e?.flags = []
                     e?.post(tap: .cghidEventTap)
                 }
             }

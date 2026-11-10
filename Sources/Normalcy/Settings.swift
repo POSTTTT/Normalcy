@@ -2,7 +2,7 @@ import Carbon
 import SwiftUI
 
 enum Action: String, CaseIterable {
-    case open, focus, desktop, move, tab, nextTab, prevTab, left, right, top, bottom, full, center
+    case open, focus, desktop, move, tab, nextTab, prevTab, back, forward, left, right, top, bottom, full, center
     case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
     case grow, shrink, resize
     case scroll
@@ -21,6 +21,8 @@ enum Action: String, CaseIterable {
         case .tab: "t"
         case .nextTab: "tn"
         case .prevTab: "tp"
+        case .back: "bk"
+        case .forward: "fw"
         case .left: "h"
         case .right: "l"
         case .top: "k"
@@ -53,6 +55,8 @@ enum Action: String, CaseIterable {
         case .tab: "Move Tab to New Window"
         case .nextTab: "Next Tab"
         case .prevTab: "Previous Tab"
+        case .back: "Back"
+        case .forward: "Forward"
         case .left: "Left Half"
         case .right: "Right Half"
         case .top: "Top Half"
@@ -85,6 +89,8 @@ enum Action: String, CaseIterable {
         case .tab: "macwindow.badge.plus"
         case .nextTab: "arrow.right.square"
         case .prevTab: "arrow.left.square"
+        case .back: "chevron.backward"
+        case .forward: "chevron.forward"
         case .left: "rectangle.lefthalf.filled"
         case .right: "rectangle.righthalf.filled"
         case .top: "rectangle.tophalf.filled"
@@ -115,7 +121,7 @@ enum Action: String, CaseIterable {
     var group: String {
         switch self {
         case .open, .focus: "Apps"
-        case .desktop, .move, .tab, .nextTab, .prevTab: "Desktops & Tabs"
+        case .desktop, .move, .tab, .nextTab, .prevTab, .back, .forward: "Desktops & Tabs"
         case .left, .right, .top, .bottom: "Halves"
         case .leftThird, .centerThird, .rightThird: "Thirds"
         case .topLeft, .topRight, .bottomLeft, .bottomRight: "Quarters"

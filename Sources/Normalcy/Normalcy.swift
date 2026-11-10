@@ -10,6 +10,7 @@ import SwiftUI
 //   m <1-9|h|l>    move focused window to desktop N / left / right
 //   t [h|l|k|j|f|c]   move current tab to a new window, optionally placed with a layout
 //   tn tp          next / previous tab
+//   fw bk          forward / back, like a two-finger swipe
 //   h l k j        window: left / right / top / bottom half
 //   f c            window: full / center
 //   + -            window: 10% bigger / smaller, staying centered
@@ -24,6 +25,7 @@ enum Command: Equatable {
     case moveToDesktop(CGKeyCode)
     case tabToWindow(CGRect?) // optional layout for the new window
     case switchTab(next: Bool)
+    case history(forward: Bool)
     case layout(CGRect) // fractions of the screen, top-left origin
     case resize(Int) // steps bigger (or smaller, if negative) around the window's center
     case resizeEdge(CGSize) // steps to move the right and bottom edges out (or in, if negative)
@@ -110,6 +112,8 @@ enum Command: Equatable {
             return .tabToWindow(rect)
         case .nextTab: return .switchTab(next: true)
         case .prevTab: return .switchTab(next: false)
+        case .forward: return .history(forward: true)
+        case .back: return .history(forward: false)
         case .grow: return .resize(1)
         case .shrink: return .resize(-1)
         case .resize: return directionSteps(arg, defs).map { .resizeEdge($0) }
@@ -321,7 +325,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let wait: Double = switch cmd {
             case .ctrlKey, .moveToDesktop: 1.5
             case .tabToWindow, .open: 0.6
-            case .switchTab: 0.35
+            case .switchTab, .history: 0.35
             default: 0.2
             }
             scheduleRefocus(after: wait)
@@ -537,15 +541,21 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
             }
         case .switchTab(let next):
-            // Same as .tabToWindow: give the app back key focus, then Cmd+Shift+] / [,
-            // the next / previous tab shortcut in Safari, Chrome, Firefox, Finder, Terminal and VS Code.
-            target?.activate()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                self.pressKey(next ? 30 : 33, [.maskCommand, .maskShift]) // kVK_ANSI_RightBracket / LeftBracket
-            }
+            // Cmd+Shift+] / [: next / previous tab in Safari, Chrome, Firefox, Finder, Terminal and VS Code.
+            pressInTarget(next ? 30 : 33, [.maskCommand, .maskShift]) // kVK_ANSI_RightBracket / LeftBracket
+        case .history(let forward):
+            // Cmd+] / [: what a two-finger swipe does in Safari, Chrome, Firefox and Finder.
+            // There's no public API to post the swipe itself.
+            pressInTarget(forward ? 30 : 33, .maskCommand)
         case .settings:
             openSettings()
         }
+    }
+
+    // Same as .tabToWindow: give the app back key focus first, then press the keys.
+    func pressInTarget(_ key: CGKeyCode, _ flags: CGEventFlags) {
+        target?.activate()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { self.pressKey(key, flags) }
     }
 
     func pressKey(_ key: CGKeyCode, _ flags: CGEventFlags) {
@@ -943,6 +953,8 @@ enum Main {
         precondition(Command.parse("t x", d) == nil)
         precondition(Command.parse("tn", d) == .switchTab(next: true))
         precondition(Command.parse("tp", d) == .switchTab(next: false))
+        precondition(Command.parse("fw", d) == .history(forward: true))
+        precondition(Command.parse("bk", d) == .history(forward: false))
         precondition(Command.parse("t o", d) == nil) // only layout triggers allowed
         precondition(Command.parse("o", d) == nil)
         precondition(Command.parse("", d) == nil)

@@ -29,6 +29,8 @@ then `h` gives `d h`.
 | `t` | Move Tab to New Window | optional: a window position | Moves the current tab out into its own window. Add a position to place it: `t h` (left half), `t l3`, `t hk`, `t f` |
 | `tn` | Next Tab | none | Shows the next tab in the front app (presses Cmd+Shift+]) |
 | `tp` | Previous Tab | none | Shows the previous tab in the front app (presses Cmd+Shift+[) |
+| `bk` | Back | none | Goes back, like a two-finger swipe right (presses Cmd+[) |
+| `fw` | Forward | none | Goes forward, like a two-finger swipe left (presses Cmd+]) |
 
 ## Window position
 

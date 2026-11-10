@@ -34,10 +34,27 @@ short commands for apps, desktops, tabs and windows, without touching the mouse.
 
 ## Requirements
 
-- macOS 14 or later
-- Swift 5.9 or later (Xcode or the Command Line Tools)
+- macOS 14 or later, Apple silicon
+- To run from source: Swift 5.9 or later (Xcode or the Command Line Tools)
 
 ## Install
+
+1. Download `Normalcy-x.y.z.zip` from the [latest release](https://github.com/POSTTTT/Normalcy/releases/latest).
+2. Unzip it and move **Normalcy.app** to Applications.
+3. Open it. Normalcy isn't notarized by Apple, so the first time macOS says
+   *"Normalcy" Not Opened*. Click **Done** (not Move to Trash), then let it open either way:
+   - **In System Settings:** Privacy & Security, scroll down to *"Normalcy" was blocked*,
+     click **Open Anyway**, enter your password, then open Normalcy again and choose **Open**.
+   - **Or in Terminal:**
+     ```sh
+     xattr -dr com.apple.quarantine /Applications/Normalcy.app
+     ```
+     then open Normalcy as usual.
+
+After that, Normalcy updates itself: Settings › General › Updates shows new versions, and
+nothing installs until you click **Install**.
+
+Or run it from source:
 
 ```sh
 git clone https://github.com/POSTTTT/Normalcy.git
@@ -113,7 +130,7 @@ scripts/build-app.sh                     # dist/Normalcy.app and a .zip for a re
 `Normalcy.app` is signed with a self-made "Normalcy Signing" certificate, so macOS keeps its
 Accessibility permission across builds and updates. Without that certificate in your keychain,
 `build-app.sh` signs ad hoc instead, and macOS asks for Accessibility again after each build.
-It isn't notarized either way: a downloaded copy opens with right-click › Open the first time.
+It isn't notarized either way: see [Install](#install) for opening a downloaded copy.
 
 ### Layout
 

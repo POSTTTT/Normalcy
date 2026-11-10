@@ -411,8 +411,49 @@ struct GeneralSettings: View {
                      : "Minimal hides the text field and shows what you type as key caps.")
                     .settingsFooter()
             }
+            UpdateSection()
         }
         .formStyle(.grouped)
+    }
+}
+
+struct UpdateSection: View {
+    @ObservedObject var updater = Updater.shared
+
+    var body: some View {
+        let current = Updater.current
+        Section {
+            LabeledContent("Version", value: current ?? "Development build")
+            LabeledContent(statusText) {
+                HStack {
+                    if let r = updater.latest {
+                        Link("What's New", destination: r.page)
+                        Button("Install") { updater.install() }.disabled(updater.status == .installing)
+                    }
+                    Button("Check for Updates") { updater.check() }
+                        .disabled(current == nil || updater.status == .checking || updater.status == .installing)
+                }
+            }
+            Toggle("Check for updates automatically", isOn: $updater.auto).disabled(current == nil)
+        } header: {
+            Text("Updates")
+        } footer: {
+            Text(current == nil
+                 ? "Updates work in Normalcy.app, not when run from source."
+                 : "Checks once a day, and never installs on its own. After an update, macOS asks for Accessibility again.")
+                .settingsFooter()
+        }
+    }
+
+    var statusText: String {
+        switch updater.status {
+        case .idle: ""
+        case .checking: "Checking…"
+        case .upToDate: "Normalcy is up to date"
+        case .available: "Version \(updater.latest?.version ?? "") is available"
+        case .installing: "Downloading and installing…"
+        case .failed(let why): why
+        }
     }
 }
 

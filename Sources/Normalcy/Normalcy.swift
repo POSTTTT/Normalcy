@@ -185,7 +185,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
         let pages: [(String, String, AnyView, CGFloat)] = [
-            ("General", "gearshape", AnyView(GeneralSettings()), 460),
+            ("General", "gearshape", AnyView(GeneralSettings()), 620),
             ("Commands", "command", AnyView(CommandSettings()), 680),
             ("Windows", "macwindow", AnyView(WindowSettings()), 680),
             ("App Shortcuts", "keyboard.badge.ellipsis", AnyView(AppShortcutSettings()), 520),
@@ -239,6 +239,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
         buildPanel()
         registerHotKey()
+        Updater.shared.start()
         trackRecentApps()
         // `Normalcy --run "t h"` from a script or terminal runs a command in this instance,
         // against the frontmost app, as if typed in the bar.
@@ -307,11 +308,22 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "command", accessibilityDescription: "Normalcy")
         let menu = NSMenu()
+        // Shown only while a newer version is out; nothing installs until it's clicked.
+        let update = menu.addItem(withTitle: "", action: #selector(installUpdate), keyEquivalent: "")
+        update.target = self
+        update.isHidden = true
+        Updater.shared.$latest.sink { update.title = "Install Version \($0?.version ?? "")…"; update.isHidden = $0 == nil }.store(in: &subs)
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Normalcy", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
         statusItem = item
+    }
+
+    // Settings shows how the install is going, and any error.
+    @objc func installUpdate() {
+        openSettings()
+        Updater.shared.install()
     }
 
     @objc func openSettings() {
@@ -1289,6 +1301,12 @@ enum Main {
         precondition(ctrlC.eventFlags == .maskControl)
         precondition(HotKey(keyCode: 0, modifiers: UInt32(cmdKey | shiftKey), label: "").eventFlags == [.maskCommand, .maskShift])
         precondition(ghostty[0].title == "⌃ C" && CommandDef(id: "a", trigger: "cp", name: "Close process").title == "Close process")
+        precondition(Updater.isNewer("0.3.0", than: "0.2.0") && Updater.isNewer("0.10.0", than: "0.9.1"))
+        precondition(!Updater.isNewer("0.2.0", than: "0.2.0") && !Updater.isNewer("0.2", than: "0.2.0") && !Updater.isNewer("0.1.9", than: "0.2.0"))
+        let rel = #"{"tag_name":"v0.3.0","html_url":"https://github.com/POSTTTT/Normalcy/releases/tag/v0.3.0","assets":[{"name":"notes.txt","browser_download_url":"https://github.com/x"},{"name":"Normalcy-0.3.0.zip","browser_download_url":"https://github.com/POSTTTT/Normalcy/releases/download/v0.3.0/Normalcy-0.3.0.zip"}]}"#
+        precondition(Updater.parse(Data(rel.utf8))?.version == "0.3.0" && Updater.parse(Data(rel.utf8))?.zip.lastPathComponent == "Normalcy-0.3.0.zip")
+        precondition(Updater.parse(Data(rel.replacingOccurrences(of: "https://github.com/POSTTTT", with: "http://evil.example").utf8)) == nil)
+        precondition(Updater.parse(Data("{}".utf8)) == nil)
         let hp = Palette()
         hp.defs = { d }
         var clicked: [Command] = []

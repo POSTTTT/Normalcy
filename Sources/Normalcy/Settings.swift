@@ -440,7 +440,7 @@ struct UpdateSection: View {
         } footer: {
             Text(current == nil
                  ? "Updates work in Normalcy.app, not when run from source."
-                 : "Checks once a day, and never installs on its own. After an update, macOS asks for Accessibility again.")
+                 : "Checks once a day, and never installs on its own.")
                 .settingsFooter()
         }
     }

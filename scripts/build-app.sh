@@ -2,8 +2,10 @@
 # Builds dist/Normalcy.app and dist/Normalcy-<version>.zip from this package.
 #   scripts/build-app.sh            version from the latest git tag (v0.1.0 -> 0.1.0)
 #   scripts/build-app.sh 0.2.0      or as given
-# The app is signed ad hoc (no certificate). Downloaded copies need right-click > Open once,
-# and macOS asks for Accessibility again after each new build.
+# Signed with the "Normalcy Signing" certificate when it's in the keychain (NORMALCY_SIGN_ID to use
+# another), so macOS keeps Accessibility across builds and updates. Without it, ad hoc: macOS then
+# asks for Accessibility again after every build. Either way it isn't notarized, so downloaded
+# copies need right-click > Open once.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -47,6 +49,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-codesign --force --sign - "$APP"
+SIGN_ID="${NORMALCY_SIGN_ID:-Normalcy Signing}"
+if security find-identity -p codesigning | grep -q "\"$SIGN_ID\""; then
+  codesign --force --sign "$SIGN_ID" "$APP"
+else
+  echo "warning: no \"$SIGN_ID\" certificate; signing ad hoc, so Accessibility resets with this build" >&2
+  SIGN_ID="ad hoc"
+  codesign --force --sign - "$APP"
+fi
 ditto -c -k --keepParent "$APP" "dist/Normalcy-$VERSION.zip"
-echo "Built $APP and dist/Normalcy-$VERSION.zip ($VERSION, $(uname -m))"
+echo "Built $APP and dist/Normalcy-$VERSION.zip ($VERSION, $(uname -m), signed: $SIGN_ID)"

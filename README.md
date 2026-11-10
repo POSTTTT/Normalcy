@@ -110,8 +110,10 @@ swift scripts/make-icon.swift            # redraw Sources/Normalcy/Resources/App
 scripts/build-app.sh                     # dist/Normalcy.app and a .zip for a release
 ```
 
-`Normalcy.app` is signed ad hoc, with no certificate. A downloaded copy opens with
-right-click › Open the first time, and macOS asks for Accessibility again after each new build.
+`Normalcy.app` is signed with a self-made "Normalcy Signing" certificate, so macOS keeps its
+Accessibility permission across builds and updates. Without that certificate in your keychain,
+`build-app.sh` signs ad hoc instead, and macOS asks for Accessibility again after each build.
+It isn't notarized either way: a downloaded copy opens with right-click › Open the first time.
 
 ### Layout
 

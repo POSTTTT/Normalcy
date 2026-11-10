@@ -89,7 +89,7 @@ The step size, whether `mo` shows its box, and the pointer's own direction keys 
 | Key | What it does |
 | --- | --- |
 | **Return** | Runs the command, or fills in the highlighted one's trigger when it needs input |
-| **Shift+Return** | Runs it and keeps the bar open |
+| **Shift+Return** | Runs it and keeps the bar open. In `s`, `re` or `cl` with nothing left to run, it ends that command instead, leaving the bar empty: no need to reach for Esc |
 | **Tab** / **Shift+Tab**, **Ctrl+N** / **Ctrl+P** | Move the highlight in the list |
 | **Esc** | Clears what's typed, then closes the bar |
 | **Ctrl+W** | Deletes the last word |

@@ -1259,6 +1259,16 @@ enum Main {
         precondition(clicked.last == .clickAt(CGPoint(x: 20, y: 10), right: false, count: 2))
         hp.text = ""
         precondition(hp.hints.isEmpty)
+        var ran: [String] = []
+        hp.submitContinuing = { ran.append($0) }
+        for t in ["s ", "re ", "cl ", "cl a"] {
+            hp.text = t
+            hp.enter(continuing: true)
+            precondition(hp.text == "" && ran.isEmpty, t) // Shift+Enter finishes the mode, bar stays
+        }
+        hp.text = "d 0"
+        hp.enter(continuing: true)
+        precondition(ran == ["d 0"]) // a wrong argument still goes through, and beeps
         let many = Palette.labeled((0..<30).map { CGRect(x: CGFloat($0), y: 0, width: 1, height: 1) })
         precondition(many.count == 30 && many[0].label == "aa" && many[9].label == "sa" && Set(many.map(\.label)).count == 30)
         precondition(Palette.labeled([]).isEmpty)

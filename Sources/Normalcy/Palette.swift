@@ -312,6 +312,15 @@ final class Palette: ObservableObject {
         if let list = appMatches, list.indices.contains(selected), let head = text.split(separator: " ").first {
             return run(head + " " + list[selected].name)
         }
+        // Shift+Enter in a mode with nothing to run ("s ", "re ", "cl " or a half-typed label) finishes
+        // it: the bar stays up, empty, for the next command, so Esc isn't needed.
+        let words = text.split(separator: " ")
+        if continuing, text.contains(" "), Command.parse(text, defs()) == nil,
+           let head = words.first.flatMap({ Command.lookup(String($0), in: defs()) }),
+           words.count == 1 || head.id == Action.hints.rawValue {
+            text = ""
+            return
+        }
         let rows = matches
         guard !text.contains(" "), rows.indices.contains(selected) else { return run(text) }
         let d = rows[selected]

@@ -308,6 +308,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "command", accessibilityDescription: "Normalcy")
         let menu = NSMenu()
+        menu.addItem(withTitle: "Normalcy \(Updater.current ?? "development build")", action: nil, keyEquivalent: "").isEnabled = false
+        menu.addItem(.separator())
         // Shown only while a newer version is out; nothing installs until it's clicked.
         let update = menu.addItem(withTitle: "", action: #selector(installUpdate), keyEquivalent: "")
         update.target = self

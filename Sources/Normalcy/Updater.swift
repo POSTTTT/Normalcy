@@ -3,8 +3,7 @@ import AppKit
 // Checks GitHub for a newer release and, only when asked, swaps it in for this app and relaunches.
 final class Updater: ObservableObject {
     static let shared = Updater()
-    // A public repo: the source repo is private, and GitHub hides its releases from the updater.
-    static let latestURL = URL(string: "https://api.github.com/repos/POSTTTT/Normalcy-releases/releases/latest")!
+    static let latestURL = URL(string: "https://api.github.com/repos/POSTTTT/Normalcy/releases/latest")!
 
     enum Status: Equatable { case idle, checking, upToDate, available, installing, failed(String) }
     struct Release: Equatable {

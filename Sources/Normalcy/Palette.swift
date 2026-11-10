@@ -103,7 +103,7 @@ final class Palette: ObservableObject {
         let exact = Command.lookup(head, in: defs).map { [$0] } ?? []
         let prefix = defs.filter { $0.trigger != head && $0.trigger.hasPrefix(head) && !exact.contains($0) }
         let title = defs.filter {
-            !$0.trigger.hasPrefix(head) && !exact.contains($0) && (Action(rawValue: $0.id)?.title ?? "").localizedCaseInsensitiveContains(head)
+            !$0.trigger.hasPrefix(head) && !exact.contains($0) && $0.title.localizedCaseInsensitiveContains(head)
         }
         return exact + prefix + title
     }
@@ -138,6 +138,19 @@ final class Palette: ObservableObject {
               Command.lookup(String(words[0]), in: defs())?.id == Action.scroll.rawValue,
               let steps = Command.directionSteps(key, defs()) else { return false }
         live(.scroll(steps))
+        return true
+    }
+
+    // Tab mode: once "ts " is typed, left / right go to the previous / next tab right away
+    // and are never typed, like scroll mode. Returns false when the key should be typed as usual.
+    var tabMode: Bool {
+        let words = text.split(separator: " ")
+        return words.count == 1 && text.hasSuffix(" ") && Command.lookup(String(words[0]), in: defs())?.id == Action.tabs.rawValue
+    }
+
+    func tabKey(_ key: String) -> Bool {
+        guard tabMode, let dir = Command.direction(key, in: defs()), dir == .left || dir == .right else { return false }
+        live(.switchTab(next: dir == .right))
         return true
     }
 
@@ -244,14 +257,14 @@ final class Palette: ObservableObject {
     // text plus the key starts another trigger. Returns false when the key should be typed as usual.
     func typeDirection(_ key: String) -> Bool {
         let defs = defs()
-        if scrollKey(key) || pointerKey(key) { return true }
+        if scrollKey(key) || tabKey(key) || pointerKey(key) { return true }
         guard let head = defs.first(where: { $0.enabled && $0.trigger == text }).flatMap({ Action(rawValue: $0.id) }) else { return false }
         // mo and ms may have their own direction keys.
         if head == .hints { return false } // "cl" + h would click label h at once
         let isDirection = head == .pointer || head == .pointerStep ? pointerDirection(key) != nil : Command.direction(key, in: defs) != nil
         guard isDirection, head.argHint != nil, !defs.contains(where: { $0.enabled && $0.trigger.hasPrefix(text + key) }) else { return false }
         text += " "
-        if !scrollKey(key), !pointerKey(key) { text += key }
+        if !scrollKey(key), !tabKey(key), !pointerKey(key) { text += key }
         return true
     }
 
@@ -307,6 +320,8 @@ final class Palette: ObservableObject {
     // Shift+Enter does the same but keeps going: the bar comes back for another command.
     func enter(continuing: Bool = false) {
         let run = continuing ? submitContinuing : submit
+        // Return in tab mode just closes the bar: the tabs already switched as keys were pressed.
+        if !continuing, tabMode { return cancel() }
         defer { pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1) } // the next "mo " starts from the whole screen
         // Picking from the app list switches to the highlighted app.
         if let list = appMatches, list.indices.contains(selected), let head = text.split(separator: " ").first {
@@ -534,7 +549,7 @@ struct PaletteView: View {
                         // Tiles have no titles; name the highlighted one, with what it does.
                         Group {
                             if let sel = run.first(where: { $0.offset == model.selected }) {
-                                Text(Action(rawValue: sel.element.id)?.title ?? "")
+                                Text(sel.element.title)
                             } else {
                                 Text("Use Tab to see each name")
                             }
@@ -550,14 +565,14 @@ struct PaletteView: View {
         case .grouped:
             // Section headers where the group changes; capped height, scrolls to the highlight.
             let headerAt = Set(items.filter { i, d in
-                i == 0 || Action(rawValue: rows[i - 1].id)?.group != Action(rawValue: d.id)?.group
+                i == 0 || rows[i - 1].group != d.group
             }.map(\.offset))
             ScrollViewReader { scroll in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(items, id: \.element.id) { i, d in
                             if headerAt.contains(i) {
-                                sectionHeader(Action(rawValue: d.id)?.group ?? "", first: i == 0)
+                                sectionHeader(d.group, first: i == 0)
                             }
                             tappableRow(i, d, height: 34).id(d.id)
                         }
@@ -627,9 +642,8 @@ struct PaletteView: View {
 
     // Grid style: icon with the trigger under it; the full name shows below the grid when highlighted.
     func tile(_ i: Int, _ d: CommandDef) -> some View {
-        let a = Action(rawValue: d.id)
-        return VStack(spacing: 6) {
-            Image(systemName: a?.icon ?? "questionmark").font(.system(size: 18))
+        VStack(spacing: 6) {
+            Image(systemName: d.icon).font(.system(size: 18))
             KeyCap(d.trigger)
         }
         .frame(width: 60, height: 62)
@@ -641,7 +655,7 @@ struct PaletteView: View {
             }
         }
         .contentShape(Rectangle())
-        .help(a?.title ?? d.id)
+        .help(d.title)
         .onTapGesture { model.selected = i; model.enter() }
         .transition(.opacity)
     }
@@ -649,10 +663,10 @@ struct PaletteView: View {
     func row(_ d: CommandDef, selected: Bool, height: CGFloat = 40) -> some View {
         let a = Action(rawValue: d.id)
         return HStack(spacing: 16) {
-            Image(systemName: a?.icon ?? "questionmark")
+            Image(systemName: d.icon)
                 .font(.system(size: 17))
                 .frame(width: 24)
-            Text(a?.title ?? d.id).font(.system(size: 15))
+            Text(d.title).font(.system(size: 15))
             Spacer()
             // What to type: the trigger as a key, then what goes after it.
             HStack(spacing: 6) {

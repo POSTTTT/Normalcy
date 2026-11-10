@@ -29,6 +29,7 @@ then `h` gives `d h`.
 | `t` | Move Tab to New Window | optional: a window position | Moves the current tab out into its own window. Add a position to place it: `t h` (left half), `t l3`, `t hk`, `t f` |
 | `tn` | Next Tab | none | Shows the next tab in the front app (presses Cmd+Shift+]) |
 | `tp` | Previous Tab | none | Shows the previous tab in the front app (presses Cmd+Shift+[) |
+| `ts` | Switch Tabs | `h` `l` | Then `l` / → shows the next tab and `h` / ← the previous one, as you press them. Return or Esc closes the bar |
 | `bk` | Back | none | Goes back, like a two-finger swipe right (presses Cmd+[) |
 | `fw` | Forward | none | Goes forward, like a two-finger swipe left (presses Cmd+]) |
 
@@ -77,6 +78,13 @@ Both modes move the pointer as you press keys, with no Return needed. Uppercase
 | `cl` | Click by Label | a label | Puts a letter label on every button, link, field and row in the front window. Type a label and it clicks there, no Return needed: `cl a`, `cl sd`. `r` first right-clicks, `2` first double-clicks: `cl ra` |
 
 The step size, whether `mo` shows its box, and the pointer's own direction keys (say W A S D, while windows keep H J K L) are in Settings › Commands › Pointer.
+
+## App shortcuts
+
+Your own commands, made in Settings › App Shortcuts. Each one presses a shortcut in one
+app, and is in the bar only while that app is in front. For example, in Ghostty, `cp`
+presses Ctrl+C to stop the running process. If one matches a built-in trigger, it wins
+in that app.
 
 ## Other
 

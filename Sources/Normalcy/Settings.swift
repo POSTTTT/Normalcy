@@ -2,7 +2,7 @@ import Carbon
 import SwiftUI
 
 enum Action: String, CaseIterable {
-    case open, focus, desktop, move, tab, nextTab, prevTab, back, forward, left, right, top, bottom, full, center
+    case open, focus, desktop, move, tab, nextTab, prevTab, tabs, back, forward, left, right, top, bottom, full, center
     case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
     case grow, shrink, resize
     case scroll
@@ -21,6 +21,7 @@ enum Action: String, CaseIterable {
         case .tab: "t"
         case .nextTab: "tn"
         case .prevTab: "tp"
+        case .tabs: "ts"
         case .back: "bk"
         case .forward: "fw"
         case .left: "h"
@@ -56,6 +57,7 @@ enum Action: String, CaseIterable {
         case .tab: "Move Tab to New Window"
         case .nextTab: "Next Tab"
         case .prevTab: "Previous Tab"
+        case .tabs: "Switch Tabs"
         case .back: "Back"
         case .forward: "Forward"
         case .left: "Left Half"
@@ -91,6 +93,7 @@ enum Action: String, CaseIterable {
         case .tab: "macwindow.badge.plus"
         case .nextTab: "arrow.right.square"
         case .prevTab: "arrow.left.square"
+        case .tabs: "arrow.left.arrow.right.square"
         case .back: "chevron.backward"
         case .forward: "chevron.forward"
         case .left: "rectangle.lefthalf.filled"
@@ -124,7 +127,7 @@ enum Action: String, CaseIterable {
     var group: String {
         switch self {
         case .open, .focus: "Apps"
-        case .desktop, .move, .tab, .nextTab, .prevTab, .back, .forward: "Desktops & Tabs"
+        case .desktop, .move, .tab, .nextTab, .prevTab, .tabs, .back, .forward: "Desktops & Tabs"
         case .left, .right, .top, .bottom: "Halves"
         case .leftThird, .centerThird, .rightThird: "Thirds"
         case .topLeft, .topRight, .bottomLeft, .bottomRight: "Quarters"
@@ -145,6 +148,7 @@ enum Action: String, CaseIterable {
         case .tab: "<left> <right> <up> <down> f c"
         case .resize: "<left> <right> <up> <down>"
         case .scroll: "<down> <up> <left> <right>"
+        case .tabs: "<left> <right>"
         case .pointer, .pointerStep: "<left> <down> <up> <right>"
         case .hints: "label"
         default: nil
@@ -158,7 +162,7 @@ enum Action: String, CaseIterable {
         case .focus: "app or direction"
         case .desktop, .move: "number or direction"
         case .tab: "position"
-        case .resize, .scroll: "direction"
+        case .resize, .scroll, .tabs: "direction"
         case .pointer, .pointerStep: "direction, Return clicks"
         case .hints: "label"
         default: nil
@@ -176,6 +180,7 @@ enum Action: String, CaseIterable {
         case .desktop, .move: "<trigger> 2, or <trigger> <left> / <trigger> <right> for left / right"
         case .tab: "<trigger>, or <trigger> <left> to put the new window on the left"
         case .scroll: "<trigger>, then <down> <up> <left> <right> scroll as you press them; Esc to stop"
+        case .tabs: "<trigger>, then <left> <right> go to the previous / next tab as you press them; Esc to stop"
         case .pointer: "<trigger>, then each of <left> <down> <up> <right> keeps that half of the screen and puts the pointer in its middle; uppercase nudges, Space starts over from the center. Return clicks, r then Return right-clicks, 2 then Return double-clicks"
         case .pointerStep: "<trigger>, then <left> <down> <up> <right> move the pointer by the step set below, uppercase 10 points. Return clicks, r then Return right-clicks, 2 then Return double-clicks"
         case .hints: "<trigger>, then type the label on what to click; r first right-clicks, 2 first double-clicks"
@@ -186,9 +191,15 @@ enum Action: String, CaseIterable {
 }
 
 struct CommandDef: Codable, Identifiable, Equatable {
-    let id: String // Action.rawValue
+    let id: String // Action.rawValue, or a UUID for an app shortcut
     var trigger: String
     var enabled = true
+    var shortcut: HotKey? // app shortcuts only: the keys pressed in that app
+    var name: String? // app shortcuts only, optional
+
+    var title: String { Action(rawValue: id)?.title ?? (name.flatMap { $0.isEmpty ? nil : $0 } ?? shortcut?.label ?? "") }
+    var icon: String { Action(rawValue: id)?.icon ?? "keyboard" }
+    var group: String { Action(rawValue: id)?.group ?? "This App" }
 
     static let defaults = Action.allCases.map { CommandDef(id: $0.rawValue, trigger: $0.defaultTrigger) }
 
@@ -241,6 +252,20 @@ struct HotKey: Codable, Equatable {
     init(keyCode: UInt32, modifiers: UInt32, label: String) {
         self.keyCode = keyCode; self.modifiers = modifiers; self.label = label
     }
+
+    // The Carbon modifiers as flags for a posted key event.
+    var eventFlags: CGEventFlags {
+        [(controlKey, CGEventFlags.maskControl), (optionKey, .maskAlternate), (shiftKey, .maskShift), (cmdKey, .maskCommand)]
+            .reduce(into: []) { f, m in if modifiers & UInt32(m.0) != 0 { f.insert(m.1) } }
+    }
+}
+
+// Shortcut commands for one app, in the bar only while that app is in front.
+struct AppShortcuts: Codable, Identifiable, Equatable {
+    var id: String // bundle identifier
+    var name: String
+    var path: String // for its icon
+    var commands: [CommandDef] = []
 }
 
 // How much one resize step changes a window, as fractions.
@@ -303,6 +328,15 @@ final class Store: ObservableObject {
 
     @Published var defs: [CommandDef] {
         didSet { UserDefaults.standard.set(try? JSONEncoder().encode(defs), forKey: key) }
+    }
+    @Published var appShortcuts = UserDefaults.standard.data(forKey: "appShortcuts")
+        .flatMap { try? JSONDecoder().decode([AppShortcuts].self, from: $0) } ?? [] {
+        didSet { UserDefaults.standard.set(try? JSONEncoder().encode(appShortcuts), forKey: "appShortcuts") }
+    }
+
+    // The bar's commands with this app in front: its shortcuts first, so they win a shared trigger.
+    func defs(for bundleID: String?) -> [CommandDef] {
+        (appShortcuts.first { $0.id == bundleID }?.commands ?? []) + defs
     }
 
     init() {
@@ -604,6 +638,117 @@ struct CommandRow: View {
                 .controlSize(.small)
         }
         .opacity(def.enabled ? 1 : 0.55)
+    }
+}
+
+// Shortcuts you already know in an app, each turned into a trigger for the bar.
+struct AppShortcutSettings: View {
+    @ObservedObject var store = Store.shared
+
+    var body: some View {
+        Form {
+            ForEach($store.appShortcuts) { $app in
+                Section {
+                    ForEach($app.commands) { $c in
+                        AppShortcutRow(def: $c, problem: problem(c, in: app)) {
+                            $app.wrappedValue.commands.removeAll { $0.id == c.id }
+                        }
+                    }
+                    Button("Add Shortcut") { $app.wrappedValue.commands.append(CommandDef(id: UUID().uuidString, trigger: "")) }
+                } header: {
+                    HStack(spacing: 8) {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: app.path)).resizable().frame(width: 18, height: 18)
+                        Text(app.name)
+                        Spacer()
+                        Button("Remove \(app.name)", systemImage: "minus.circle") {
+                            store.appShortcuts.removeAll { $0.id == app.id }
+                        }
+                        .labelStyle(.iconOnly).buttonStyle(.borderless)
+                    }
+                }
+            }
+            Section {} footer: {
+                HStack(alignment: .top) {
+                    Text("Each shortcut gets a trigger, and shows in the bar only while its app is in front. If it matches a built-in trigger, the app's wins there.")
+                        .settingsFooter()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("Add App…", action: addApp)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    func problem(_ c: CommandDef, in app: AppShortcuts) -> String? {
+        guard c.enabled else { return nil }
+        if c.trigger.isEmpty { return "Needs a trigger" }
+        if c.trigger.contains(" ") { return "Triggers can't contain spaces" }
+        if c.shortcut == nil { return "Click Record, then press the shortcut" }
+        if app.commands.contains(where: { $0.id != c.id && $0.enabled && $0.trigger == c.trigger }) { return "Same trigger as another shortcut here" }
+        return nil
+    }
+
+    func addApp() {
+        let panel = NSOpenPanel()
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowedContentTypes = [.application]
+        panel.prompt = "Add"
+        guard panel.runModal() == .OK, let url = panel.url, let id = Bundle(url: url)?.bundleIdentifier else { return }
+        guard !store.appShortcuts.contains(where: { $0.id == id }) else { return }
+        let name = FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+        store.appShortcuts.append(AppShortcuts(id: id, name: name, path: url.path,
+                                               commands: [CommandDef(id: UUID().uuidString, trigger: "")]))
+    }
+}
+
+struct AppShortcutRow: View {
+    @Binding var def: CommandDef
+    let problem: String?
+    let remove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            KeyCapField(text: $def.trigger, label: "Trigger", invalid: problem != nil && !def.trigger.isEmpty)
+            VStack(alignment: .leading, spacing: 2) {
+                TextField("Name", text: Binding(get: { def.name ?? "" }, set: { def.name = $0 }), prompt: Text("Name (optional)"))
+                    .labelsHidden()
+                if let problem {
+                    Label(problem, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.red)
+                }
+            }
+            KeyRecorder(key: $def.shortcut)
+            Toggle("Use", isOn: $def.enabled).labelsHidden().toggleStyle(.switch).controlSize(.small)
+            Button("Delete", systemImage: "trash", action: remove).labelStyle(.iconOnly).buttonStyle(.borderless)
+        }
+        .opacity(def.enabled ? 1 : 0.55)
+    }
+}
+
+// Click, then press a shortcut for an app command. Esc cancels.
+struct KeyRecorder: View {
+    @Binding var key: HotKey?
+    @State private var monitor: Any?
+
+    var body: some View {
+        Button(monitor != nil ? "Type shortcut…" : key?.label ?? "Record") { monitor != nil ? stop() : start() }
+            .font(.system(.body, design: .monospaced))
+            .onDisappear(perform: stop)
+    }
+
+    func start() {
+        Store.shared.recordingHotKey = true // so pressing the bar's own shortcut records it instead of opening the bar
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { e in
+            if e.keyCode == UInt16(kVK_Escape) { stop() }
+            else if let k = HotKey(event: e) { key = k; stop() }
+            return nil // swallow keys while recording
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        Store.shared.recordingHotKey = false
     }
 }
 

@@ -10,6 +10,7 @@ import SwiftUI
 //   m <1-9|h|l>    move focused window to desktop N / left / right
 //   t [h|l|k|j|f|c]   move current tab to a new window, optionally placed with a layout
 //   tn tp          next / previous tab
+//   ts <h|l>…      previous / next tab as each key is pressed
 //   fw bk          forward / back, like a two-finger swipe
 //   h l k j        window: left / right / top / bottom half
 //   f c            window: full / center
@@ -35,6 +36,7 @@ enum Command: Equatable {
     case pointerBy(CGSize) // points right and down
     case click(right: Bool, count: Int)
     case clickAt(CGPoint, right: Bool, count: Int) // global coordinates, top-left origin
+    case keys(HotKey) // an app shortcut, pressed in the app in front
     case settings
 
     static let digitKeys: [CGKeyCode] = [18, 19, 20, 21, 23, 22, 26, 28, 25] // kVK_ANSI_1...9
@@ -92,10 +94,10 @@ enum Command: Equatable {
     static func parse(_ input: String, _ defs: [CommandDef]) -> Command? {
         let s = input.trimmingCharacters(in: .whitespaces)
         let parts = s.split(separator: " ", maxSplits: 1).map(String.init)
-        guard let head = parts.first,
-              let def = lookup(head, in: defs),
-              let action = Action(rawValue: def.id) else { return nil }
+        guard let head = parts.first, let def = lookup(head, in: defs) else { return nil }
         let arg = parts.count > 1 ? parts[1].trimmingCharacters(in: .whitespaces) : ""
+        if let k = def.shortcut { return arg.isEmpty ? .keys(k) : nil }
+        guard let action = Action(rawValue: def.id) else { return nil }
         switch action {
         case .open: return arg.isEmpty ? nil : .open(arg)
         case .focus:
@@ -128,6 +130,7 @@ enum Command: Equatable {
             case "2": return .click(right: false, count: 2)
             default: return nil
             }
+        case .tabs: return nil // tabs switch as keys are pressed; Return only closes the bar
         case .hints: return nil // the labels live in the bar; it clicks once one is typed
         case .settings: return .settings
         }
@@ -185,6 +188,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             ("General", "gearshape", AnyView(GeneralSettings()), 460),
             ("Commands", "command", AnyView(CommandSettings()), 680),
             ("Windows", "macwindow", AnyView(WindowSettings()), 680),
+            ("App Shortcuts", "keyboard.badge.ellipsis", AnyView(AppShortcutSettings()), 520),
             ("Keys", "keyboard", AnyView(KeySettings()), 450),
         ]
         for (title, icon, view, height) in pages {
@@ -318,12 +322,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func buildPanel() {
         palette.submit = { [weak self] text in
-            let cmd = Command.parse(text, Store.shared.defs)
-            self?.hide()
-            if let cmd { self?.run(cmd) } else { NSSound.beep() }
+            guard let self else { return }
+            let cmd = Command.parse(text, palette.defs())
+            hide()
+            if let cmd { run(cmd) } else { NSSound.beep() }
         }
         palette.submitContinuing = { [weak self] text in
-            guard let self, let cmd = Command.parse(text, Store.shared.defs) else { return NSSound.beep() }
+            guard let self, let cmd = Command.parse(text, palette.defs()) else { return NSSound.beep() }
             // Scrolling and pointing go in small steps, so keep "s " / "mo " ready; the rest starts blank.
             let stepping = switch cmd { case .scroll, .click: true; default: false }
             let again = stepping ? (text.split(separator: " ").first.map(String.init) ?? "") + " " : ""
@@ -338,13 +343,23 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let wait: Double = switch cmd {
             case .ctrlKey, .moveToDesktop: 1.5
             case .tabToWindow, .open: 0.6
-            case .switchTab, .history: 0.35
+            case .switchTab, .history, .keys: 0.35
             default: 0.2
             }
             scheduleRefocus(after: wait)
         }
         palette.cancel = { [weak self] in self?.hide() }
-        palette.live = { [weak self] in self?.run($0) }
+        palette.live = { [weak self] cmd in
+            guard let self else { return }
+            // Tab mode: the keys go straight to the app, which stays active behind the bar, so the
+            // bar keeps focus and keeps taking keys. Activating the app would send the next key to it.
+            if case .switchTab(let next) = cmd, let pid = target?.processIdentifier {
+                return pressKey(next ? 30 : 33, [.maskCommand, .maskShift], to: pid)
+            }
+            run(cmd)
+        }
+        // The front app's own shortcuts come first, so they win a trigger shared with a built-in.
+        palette.defs = { [weak self] in Store.shared.defs(for: self?.target?.bundleIdentifier) }
         palette.loadHints = { [weak self] in self?.clickableFrames() ?? [] }
         // Next pass: the bar clears its text on hide, and the label was typed inside that text's didSet.
         palette.clickHint = { [weak self] cmd in DispatchQueue.main.async { self?.hide(); self?.run(cmd) } }
@@ -572,6 +587,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .switchTab(let next):
             // Cmd+Shift+] / [: next / previous tab in Safari, Chrome, Firefox, Finder, Terminal and VS Code.
             pressInTarget(next ? 30 : 33, [.maskCommand, .maskShift]) // kVK_ANSI_RightBracket / LeftBracket
+        case .keys(let k):
+            pressInTarget(CGKeyCode(k.keyCode), k.eventFlags)
         case .history(let forward):
             // Cmd+] / [: what a two-finger swipe does in Safari, Chrome, Firefox and Finder.
             // There's no public API to post the swipe itself.
@@ -587,13 +604,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { self.pressKey(key, flags) }
     }
 
-    func pressKey(_ key: CGKeyCode, _ flags: CGEventFlags) {
+    func pressKey(_ key: CGKeyCode, _ flags: CGEventFlags, to pid: pid_t? = nil) {
         if !AXIsProcessTrusted() { NSSound.beep(); print("Normalcy: grant Accessibility permission"); return }
         let src = CGEventSource(stateID: .hidSystemState)
         for down in [true, false] {
             let e = CGEvent(keyboardEventSource: src, virtualKey: key, keyDown: down)
             e?.flags = flags
-            e?.post(tap: .cghidEventTap)
+            if let pid { e?.postToPid(pid) } else { e?.post(tap: .cghidEventTap) }
         }
     }
 
@@ -1247,9 +1264,31 @@ enum Main {
         precondition(sp.typeDirection("j") && sp.text == "s " && scrolled.count == 4) // no space needed
         sp.text = "o "
         precondition(!sp.scrollKey("j")) // only after the scroll command
+        // Tab mode: "ts " switches tabs as left / right are pressed; up / down type as usual.
+        sp.text = "ts"
+        precondition(sp.typeDirection("l") && sp.text == "ts " && scrolled.last == .switchTab(next: true))
+        sp.typeArrow("←")
+        precondition(scrolled.last == .switchTab(next: false) && sp.text == "ts ")
+        precondition(!sp.tabKey("j") && !sp.tabKey("x"))
+        // Return closes the bar without switching again; tn / tp still step one tab.
+        var tabClosed = false, tabSubmitted: [String] = []
+        sp.cancel = { tabClosed = true }
+        sp.submit = { tabSubmitted.append($0) }
+        sp.enter()
+        precondition(tabClosed && tabSubmitted.isEmpty && Command.parse("ts", d) == nil)
+        sp.text = "tp"
+        precondition(!sp.typeDirection("h") && sp.text == "tp") // h types as usual after tp
         // Pointer: "mo " halves the screen per key, "ms " steps, uppercase nudges, Return clicks.
         precondition(Command.parse("mo", d) == .click(right: false, count: 1) && Command.parse("ms r", d) == .click(right: true, count: 1))
         precondition(Command.parse("mo 2", d) == .click(right: false, count: 2) && Command.parse("mo x", d) == nil)
+        let ctrlC = HotKey(keyCode: 8, modifiers: UInt32(controlKey), label: "⌃ C")
+        let ghostty = [CommandDef(id: "a", trigger: "cp", shortcut: ctrlC), CommandDef(id: "b", trigger: "cl", shortcut: ctrlC)] + d
+        precondition(Command.parse("cp", ghostty) == .keys(ctrlC) && Command.parse("cp x", ghostty) == nil)
+        precondition(Command.parse("cl", ghostty) == .keys(ctrlC)) // the app's trigger wins over a built-in
+        precondition(Command.parse("cp", d) == nil)
+        precondition(ctrlC.eventFlags == .maskControl)
+        precondition(HotKey(keyCode: 0, modifiers: UInt32(cmdKey | shiftKey), label: "").eventFlags == [.maskCommand, .maskShift])
+        precondition(ghostty[0].title == "⌃ C" && CommandDef(id: "a", trigger: "cp", name: "Close process").title == "Close process")
         let hp = Palette()
         hp.defs = { d }
         var clicked: [Command] = []

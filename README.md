@@ -76,6 +76,7 @@ Open Settings from the ⌘ menu bar icon or with `set`. Changes save immediately
 | **General** | The hotkey. The bar's style: *Command bar* (a text field with the list under it) or *Minimal* (what you type as key caps, at the top, center or bottom of the screen). Whether to show the command list, and its layout |
 | **Commands** | App, desktop, tab, scroll and pointer commands, and the pointer step |
 | **Windows** | The direction keys (H J K L, W A S D, I J K L or your own), the window commands, and how far `+` `-` and `re` resize |
+| **App Shortcuts** | Shortcuts you know in an app, each given a trigger. Add an app, then for each shortcut type a trigger (say `cp`), click **Record** and press the keys (say Ctrl+C). The trigger shows in the bar only while that app is in front |
 | **Keys** | The fixed keys in the command bar, for reference |
 
 Each command shows its trigger as a key cap: click it to change it, or switch the

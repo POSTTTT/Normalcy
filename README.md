@@ -94,7 +94,7 @@ Open Settings from the ⌘ menu bar icon or with `set`. Changes save immediately
 | **Commands** | App, desktop, tab, scroll and pointer commands, and the pointer step |
 | **Windows** | The direction keys (H J K L, W A S D, I J K L or your own), the window commands, and how far `+` `-` and `re` resize |
 | **App Shortcuts** | Shortcuts you know in an app, each given a trigger. Add an app, then for each shortcut type a trigger (say `cp`), click **Record** and press the keys (say Ctrl+C). The trigger shows in the bar only while that app is in front |
-| **Keys** | The fixed keys in the command bar, for reference |
+| **Keys** | The fixed keys in the command bar, for reference. Whether special keys show as symbols (⌘ ⌥ ↩) or text (Command Option Return) |
 
 Each command shows its trigger as a key cap: click it to change it, or switch the
 command off to hide it. **Reset These** restores a page's original triggers.

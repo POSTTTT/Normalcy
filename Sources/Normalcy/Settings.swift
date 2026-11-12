@@ -190,7 +190,7 @@ struct CommandDef: Codable, Identifiable, Equatable {
     var shortcut: HotKey? // app shortcuts only: the keys pressed in that app
     var name: String? // app shortcuts only, optional
 
-    var title: String { Action(rawValue: id)?.title ?? (name.flatMap { $0.isEmpty ? nil : $0 } ?? shortcut?.label ?? "") }
+    var title: String { Action(rawValue: id)?.title ?? (name.flatMap { $0.isEmpty ? nil : $0 } ?? shortcut.map { HotKey.display($0.label) } ?? "") }
     var icon: String { Action(rawValue: id)?.icon ?? "keyboard" }
     var group: String { Action(rawValue: id)?.group ?? "This App" }
 
@@ -246,6 +246,19 @@ struct HotKey: Codable, Equatable {
         self.keyCode = keyCode; self.modifiers = modifiers; self.label = label
     }
 
+    // A key label as shown, with special keys as symbols (⇧⌘ K, ↩) or names (Shift Command K,
+    // Return), as set in Settings › Keys. Labels are stored with symbols for the modifiers.
+    static func display(_ s: String, symbols: Bool = Store.shared.keySymbols) -> String {
+        let names = [("⌃", "Control"), ("⌥", "Option"), ("⇧", "Shift"), ("⌘", "Command"),
+                     ("↩", "Return"), ("⇥", "Tab"), ("⎋", "Esc"), ("⌫", "Delete")]
+        if symbols {
+            return s.split(separator: " ").map { w in names.first { $0.1 == w }?.0 ?? String(w) }.joined(separator: " ")
+        }
+        var out = s
+        for (symbol, name) in names { out = out.replacingOccurrences(of: symbol, with: " \(name) ") }
+        return out.split(separator: " ").joined(separator: " ")
+    }
+
     // The Carbon modifiers as flags for a posted key event.
     var eventFlags: CGEventFlags {
         [(controlKey, CGEventFlags.maskControl), (optionKey, .maskAlternate), (shiftKey, .maskShift), (cmdKey, .maskCommand)]
@@ -284,6 +297,9 @@ final class Store: ObservableObject {
     }
     @Published var showList = UserDefaults.standard.object(forKey: "showList") as? Bool ?? true {
         didSet { UserDefaults.standard.set(showList, forKey: "showList") }
+    }
+    @Published var keySymbols = UserDefaults.standard.object(forKey: "keySymbols") as? Bool ?? true { // ⌘ ↩, or Command Return
+        didSet { UserDefaults.standard.set(keySymbols, forKey: "keySymbols") }
     }
     @Published var showSpaces = UserDefaults.standard.bool(forKey: "showSpaces") {
         didSet { UserDefaults.standard.set(showSpaces, forKey: "showSpaces") }
@@ -554,6 +570,7 @@ struct WindowSettings: View {
 }
 
 struct KeySettings: View {
+    @ObservedObject var store = Store.shared
     // Fixed keys, listed so they can be found. Keep in sync with PaletteView.field's key handling.
     // Each entry: the key combinations that do it (alternatives), and what they do.
     let barKeys: [([[String]], String)] = [
@@ -570,12 +587,21 @@ struct KeySettings: View {
     var body: some View {
         Form {
             Section {
+                Picker("Show special keys as", selection: $store.keySymbols) {
+                    Text("Symbols  ⌘ ⌥ ↩").tag(true)
+                    Text("Text  Command Option Return").tag(false)
+                }
+            } footer: {
+                Text("Used for Return, Tab, Esc, Delete and the modifier keys, here and in recorded shortcuts.")
+                    .settingsFooter()
+            }
+            Section {
                 ForEach(barKeys, id: \.1) { combos, what in
                     LabeledContent(what) {
                         HStack(spacing: 4) {
                             ForEach(Array(combos.enumerated()), id: \.offset) { i, keys in
                                 if i > 0 { Text("or").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 4) }
-                                ForEach(keys, id: \.self) { KeyCap($0) }
+                                ForEach(keys, id: \.self) { KeyCap(HotKey.display($0, symbols: store.keySymbols)) }
                             }
                         }
                     }
@@ -756,10 +782,11 @@ struct AppShortcutRow: View {
 // Click, then press a shortcut for an app command. Esc cancels.
 struct KeyRecorder: View {
     @Binding var key: HotKey?
+    @ObservedObject var store = Store.shared
     @State private var monitor: Any?
 
     var body: some View {
-        Button(monitor != nil ? "Type shortcut…" : key?.label ?? "Record") { monitor != nil ? stop() : start() }
+        Button(monitor != nil ? "Type shortcut…" : key.map { HotKey.display($0.label, symbols: store.keySymbols) } ?? "Record") { monitor != nil ? stop() : start() }
             .font(.system(.body, design: .monospaced))
             .onDisappear(perform: stop)
     }
@@ -840,7 +867,7 @@ struct ShortcutRecorder: View {
             if store.hotKey != .standard, !store.recordingHotKey {
                 Button("Reset") { store.hotKey = .standard }
             }
-            Button(store.recordingHotKey ? "Type shortcut…" : store.hotKey.label) {
+            Button(store.recordingHotKey ? "Type shortcut…" : HotKey.display(store.hotKey.label, symbols: store.keySymbols)) {
                 store.recordingHotKey ? stop() : start()
             }
             .font(.system(.body, design: .monospaced))

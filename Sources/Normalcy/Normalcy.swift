@@ -1259,6 +1259,10 @@ enum Main {
         }
         precondition(HotKey(event: keyEvent([.option], " ", kVK_Space)) == .standard)
         precondition(HotKey(event: keyEvent([.command, .shift], "k", kVK_ANSI_K))?.label == "⇧⌘ K")
+        precondition(HotKey.display("⇧⌘ K", symbols: false) == "Shift Command K")
+        precondition(HotKey.display("⌥ Space", symbols: false) == "Option Space")
+        precondition(HotKey.display("⌃ Return", symbols: true) == "⌃ ↩" && HotKey.display("Esc", symbols: true) == "⎋")
+        precondition(HotKey.display("⇧⌘ K", symbols: true) == "⇧⌘ K" && HotKey.display("↩", symbols: false) == "Return")
         precondition(HotKey(event: keyEvent([.shift], "k", kVK_ANSI_K)) == nil)
         precondition(Command.parse("+", d) == .resize(1) && Command.parse("-", d) == .resize(-1))
         precondition(Command.parse("re l", d) == .resizeEdge(CGSize(width: 1, height: 0)))

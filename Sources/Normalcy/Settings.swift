@@ -171,23 +171,6 @@ enum Action: String, CaseIterable {
 
     // Enter on the row fills in the trigger instead of running, so an argument can be typed.
     var argRequired: Bool { argHint != nil && self != .tab }
-
-    // Usage shown under the command in Settings; <trigger> is replaced with the current trigger.
-    var example: String? {
-        switch self {
-        case .open: "<trigger> Safari"
-        case .focus: "<trigger> saf — matches the start of the app name; <trigger> <left> <down> <up> <right> switches to the nearest window that way"
-        case .desktop, .move: "<trigger> 2, or <trigger> <left> / <trigger> <right> for left / right"
-        case .tab: "<trigger>, or <trigger> <left> to put the new window on the left"
-        case .scroll: "<trigger>, then <down> <up> <left> <right> scroll as you press them; Esc to stop"
-        case .tabs: "<trigger>, then <left> <right> go to the previous / next tab as you press them; Esc to stop"
-        case .pointer: "<trigger>, then each of <left> <down> <up> <right> keeps that half of the screen and puts the pointer in its middle; uppercase nudges, Space starts over from the center. Return clicks, r then Return right-clicks, 2 then Return double-clicks"
-        case .pointerStep: "<trigger>, then <left> <down> <up> <right> move the pointer by the step set below, uppercase 10 points. Return clicks, r then Return right-clicks, 2 then Return double-clicks"
-        case .hints: "<trigger>, then type the label on what to click; r first right-clicks, 2 first double-clicks"
-        case .resize: "<trigger> <left> <right> <up> <down> moves the window's free edge that way: its right or bottom edge, or the left or top edge of a window against the right or bottom of the screen"
-        default: nil
-        }
-    }
 }
 
 struct CommandDef: Codable, Identifiable, Equatable {
@@ -659,12 +642,6 @@ struct CommandRow: View {
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
                 Text(a?.title ?? def.id)
-                if let example = a?.example {
-                    Text(Command.spell(example.replacingOccurrences(of: "<trigger>", with: def.trigger.isEmpty ? "…" : def.trigger), Store.shared.defs))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
                 if let problem {
                     Label(problem, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption).foregroundStyle(.red)

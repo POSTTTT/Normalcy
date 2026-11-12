@@ -35,6 +35,18 @@ then `h` gives `d h`.
 | `bk` | Back | none | Goes back, like a two-finger swipe right (presses Cmd+[) |
 | `fw` | Forward | none | Goes forward, like a two-finger swipe left (presses Cmd+]) |
 
+## Edit
+
+After `cp`, `cu` or `pa`, a note at the bottom of the screen says **Copied**, **Cut** or **Pasted**. Copied and Cut show only if the clipboard changed, so with nothing selected there's no note.
+
+| Trigger | Command | Input | What it does |
+| --- | --- | --- | --- |
+| `cp` | Copy | optional: `h`, `l`, `j` / `k`, or `a` | Copies the selection in the front app (presses Cmd+C). `cp h` copies the word before the cursor, `cp l` the word after it, `cp j` or `cp k` the whole line it's in, `cp a` everything. The text isn't left highlighted: the cursor ends up where it was, or at the end of the line |
+| `cu` | Cut | optional: `h`, `l`, `j` / `k`, or `a` | Cuts the selection in the front app (presses Cmd+X). `cu h`, `cu l`, `cu j` and `cu a` cut the word before, the word after, the line, or everything, like `cp` |
+| `pa` | Paste | none | Pastes in the front app (presses Cmd+V) |
+| `sa` | Select All | none | Selects everything in the front app (presses Cmd+A) |
+| `se` | Select | `h`, `l`, `j` / `k`, as you press them | Selects as each key is pressed, no Return needed: `h` the word before the cursor, `l` the word after, and each more `h` or `l` adds a word that way: `se lll` selects three words. `j` or `k` selects the whole line the cursor is in. **Return** or **Esc** closes the bar |
+
 ## Window position
 
 These take no input.

@@ -6,6 +6,7 @@ enum Action: String, CaseIterable {
     case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
     case grow, shrink, resize
     case scroll, arrows
+    case copy, cut, paste, selectAll, select
     case pointer, pointerStep, hints
     case settings
 
@@ -44,6 +45,11 @@ enum Action: String, CaseIterable {
         case .resize: "re"
         case .scroll: "s"
         case .arrows: "ar"
+        case .copy: "cp"
+        case .cut: "cu"
+        case .paste: "pa"
+        case .selectAll: "sa"
+        case .select: "se"
         case .pointer: "mo"
         case .pointerStep: "ms"
         case .hints: "cl"
@@ -83,6 +89,11 @@ enum Action: String, CaseIterable {
         case .resize: "Resize by Direction"
         case .scroll: "Scroll"
         case .arrows: "Arrow Keys"
+        case .copy: "Copy"
+        case .cut: "Cut"
+        case .paste: "Paste"
+        case .selectAll: "Select All"
+        case .select: "Select"
         case .pointer: "Pointer by Halves"
         case .pointerStep: "Pointer by Steps"
         case .hints: "Click by Label"
@@ -122,6 +133,11 @@ enum Action: String, CaseIterable {
         case .resize: "arrow.up.and.down.and.arrow.left.and.right"
         case .scroll: "scroll"
         case .arrows: "arrowkeys"
+        case .copy: "doc.on.doc"
+        case .cut: "scissors"
+        case .paste: "doc.on.clipboard"
+        case .selectAll: "selection.pin.in.out"
+        case .select: "character.cursor.ibeam"
         case .pointer: "cursorarrow.rays"
         case .pointerStep: "cursorarrow.motionlines"
         case .hints: "cursorarrow.click"
@@ -143,6 +159,7 @@ enum Action: String, CaseIterable {
         case .full, .center: "Fill & Center"
         case .grow, .shrink, .resize: "Resize"
         case .scroll, .arrows: "Scroll"
+        case .copy, .cut, .paste, .selectAll, .select: "Edit"
         case .pointer, .pointerStep, .hints: "Pointer"
         case .settings: "Other"
         }
@@ -159,6 +176,8 @@ enum Action: String, CaseIterable {
         case .scroll: "<down> <up> <left> <right>"
         case .tabs: "<left> <right>"
         case .arrows: "<left> <down> <up> <right>"
+        case .copy, .cut: "<left> <right> <down> a"
+        case .select: "<left> <right> <down>"
         case .pointer, .pointerStep: "<left> <down> <up> <right>"
         case .hints: "label"
         default: nil
@@ -173,6 +192,8 @@ enum Action: String, CaseIterable {
         case .desktop, .move: "number or direction"
         case .tab: "position"
         case .resize, .scroll, .tabs, .arrows: "direction"
+        case .copy, .cut: "word, line or a for all"
+        case .select: "word or line"
         case .pointer, .pointerStep: "direction, Return clicks"
         case .hints: "label"
         default: nil
@@ -180,7 +201,7 @@ enum Action: String, CaseIterable {
     }
 
     // Enter on the row fills in the trigger instead of running, so an argument can be typed.
-    var argRequired: Bool { argHint != nil && self != .tab }
+    var argRequired: Bool { argHint != nil && ![.tab, .copy, .cut].contains(self) }
 }
 
 struct CommandDef: Codable, Identifiable, Equatable {
@@ -487,7 +508,7 @@ struct CommandSettings: View {
     }
 
     var body: some View {
-        CommandGroups(groups: ["Apps", "Desktops & Tabs", "Scroll", "Pointer", "Other"],
+        CommandGroups(groups: ["Apps", "Desktops & Tabs", "Edit", "Scroll", "Pointer", "Other"],
                       note: "The key cap is what you type. Click it to change it; switch a command off to hide it.") {
             EmptyView()
         } after: {

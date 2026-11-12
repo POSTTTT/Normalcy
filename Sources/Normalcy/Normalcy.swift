@@ -19,9 +19,31 @@ import SwiftUI
 //   re <h|l|k|j>…  window: narrower / wider / shorter / taller, one step per key
 //   s <j|k|h|l>…   scroll the window down / up / left / right as each key is pressed
 //   ar <h|j|k|l>…  press the left / down / up / right arrow key as each key is pressed
+//   se <h|l|j>…    select a word before / after the cursor, or its line, as each key is pressed
+//   cp cu pa sa    copy / cut / paste / select all
+//   cp cu <h|l|j|a>  copy / cut the word before / after the cursor, its line, or everything
 //   cl <label>     click what that label sits on in the front window
 //   set            open settings
+struct KeyPress: Equatable {
+    var key: CGKeyCode
+    var flags: CGEventFlags
+}
+
 enum Command: Equatable {
+    // Keys that select, the way you would by hand: .left the word before the cursor (or one more
+    // word, if a selection is going), .right the word after, .top / .bottom the whole line the
+    // cursor is in, without its line break. Used by "cp" / "cu" with a direction, and by "se".
+    static func selectKeys(_ dir: Action) -> [KeyPress]? {
+        let arrow: CGEventFlags = [.maskNumericPad, .maskSecondaryFn]
+        switch dir {
+        case .left: return [KeyPress(key: 123, flags: arrow.union([.maskAlternate, .maskShift]))]
+        case .right: return [KeyPress(key: 124, flags: arrow.union([.maskAlternate, .maskShift]))]
+        case .top, .bottom: return [KeyPress(key: 123, flags: arrow.union(.maskCommand)),
+                                    KeyPress(key: 124, flags: arrow.union([.maskCommand, .maskShift]))]
+        default: return nil
+        }
+    }
+
     case open(String)
     case focus(String)
     case focusWindow(Action) // the nearest window on this desktop to the left / right / top / bottom
@@ -40,6 +62,7 @@ enum Command: Equatable {
     case click(right: Bool, count: Int)
     case clickAt(CGPoint, right: Bool, count: Int) // global coordinates, top-left origin
     case keys(HotKey) // an app shortcut, pressed in the app in front
+    case pressKeys([KeyPress]) // several keys in a row in the app in front, e.g. select a word then copy
     case settings
 
     static let digitKeys: [CGKeyCode] = [18, 19, 20, 21, 23, 22, 26, 28, 25] // kVK_ANSI_1...9
@@ -136,7 +159,21 @@ enum Command: Equatable {
             case "2": return .click(right: false, count: 2)
             default: return nil
             }
-        case .arrows: return nil // arrow keys are pressed as keys are typed; Return only closes the bar
+        // Cmd+C / X / V / A in the app in front, the same path as an app shortcut.
+        case .copy, .cut:
+            let key: CGKeyCode = action == .copy ? 8 : 7 // kVK_ANSI_C, kVK_ANSI_X
+            if arg.isEmpty { return .keys(HotKey(keyCode: UInt32(key), modifiers: UInt32(cmdKey), label: action == .copy ? "⌘ C" : "⌘ X")) }
+            // "cp a": everything, by Cmd+A. Otherwise a word or the line, by direction.
+            let dir = arg == "a" ? .right : direction(arg, in: defs)
+            guard let dir, let select = arg == "a" ? [KeyPress(key: 0, flags: .maskCommand)] : selectKeys(dir) else { return nil } // kVK_ANSI_A
+            // After a copy, a plain arrow drops the highlight, leaving the cursor where it was: at the
+            // end of the word before it, the start of the word after it, or the end of the line
+            // (for "cp a", the end of the text).
+            let unselect = action == .copy ? [KeyPress(key: dir == .right && arg != "a" ? 123 : 124, flags: [.maskNumericPad, .maskSecondaryFn])] : []
+            return .pressKeys(select + [KeyPress(key: key, flags: .maskCommand)] + unselect)
+        case .paste: return .keys(HotKey(keyCode: UInt32(kVK_ANSI_V), modifiers: UInt32(cmdKey), label: "⌘ V"))
+        case .selectAll: return .keys(HotKey(keyCode: UInt32(kVK_ANSI_A), modifiers: UInt32(cmdKey), label: "⌘ A"))
+        case .arrows, .select: return nil // arrow keys are pressed as keys are typed; Return only closes the bar
         case .tabs: return nil // tabs switch as keys are pressed; Return only closes the bar
         case .hints: return nil // the labels live in the bar; it clicks once one is typed
         case .settings: return .settings
@@ -372,7 +409,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let wait: Double = switch cmd {
             case .ctrlKey, .moveToDesktop: 1.5
             case .tabToWindow, .open: 0.6
-            case .switchTab, .history, .keys: 0.35
+            case .switchTab, .history, .keys, .pressKeys: 0.35
             default: 0.2
             }
             scheduleRefocus(after: wait)
@@ -387,6 +424,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             if case .arrow(let dir) = cmd, let pid = target?.processIdentifier {
                 return pressKey(Self.arrowKeyCode(dir), Self.arrowFlags, to: pid)
+            }
+            if case .pressKeys(let keys) = cmd, let pid = target?.processIdentifier {
+                return keys.forEach { self.pressKey($0.key, $0.flags, to: pid) }
             }
             run(cmd)
         }
@@ -621,8 +661,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             pressInTarget(next ? 30 : 33, [.maskCommand, .maskShift]) // kVK_ANSI_RightBracket / LeftBracket
         case .arrow(let dir):
             pressInTarget(Self.arrowKeyCode(dir), Self.arrowFlags)
+        case .pressKeys(let keys):
+            pressAndConfirm(keys)
         case .keys(let k):
-            pressInTarget(CGKeyCode(k.keyCode), k.eventFlags)
+            pressAndConfirm([KeyPress(key: CGKeyCode(k.keyCode), flags: k.eventFlags)])
         case .history(let forward):
             // Cmd+] / [: what a two-finger swipe does in Safari, Chrome, Firefox and Finder.
             // There's no public API to post the swipe itself.
@@ -638,6 +680,63 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     // A real arrow key press carries these; some apps check for them.
     static let arrowFlags: CGEventFlags = [.maskNumericPad, .maskSecondaryFn]
+
+    // Like pressInTarget, for several keys. Cmd+C / X / V among them shows "Copied", "Cut" or
+    // "Pasted"; copy and cut only once the clipboard has changed, so with nothing selected, nothing shows.
+    func pressAndConfirm(_ keys: [KeyPress]) {
+        let before = NSPasteboard.general.changeCount
+        let edit = keys.first { $0.flags == .maskCommand && [7, 8, 9].contains($0.key) }?.key // kVK_ANSI_X, C, V
+        target?.activate()
+        // A gap between keys: browsers apply a selection in the page asynchronously, while Cmd+C
+        // goes through the Edit menu at once, so without it the copy beats the selection.
+        // shortcut: fixed 80 ms gaps; lengthen if a slow app still copies too early.
+        let gap = 0.08
+        for (i, k) in keys.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15 + gap * Double(i)) { self.pressKey(k.key, k.flags) }
+        }
+        guard let edit else { return }
+        // Then a wait for the app to fill the clipboard.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15 + gap * Double(keys.count) + 0.25) {
+            if edit == 9 { self.showToast("Pasted") }
+            else if NSPasteboard.general.changeCount != before { self.showToast(edit == 8 ? "Copied" : "Cut") }
+        }
+    }
+
+    // A short note at the bottom of the screen that fades on its own, like the volume HUD.
+    lazy var toast: NSPanel = {
+        let p = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.ignoresMouseEvents = true
+        p.level = .floating
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        return p
+    }()
+    var toastHide: DispatchWorkItem?
+
+    func showToast(_ text: String) {
+        let view = NSHostingView(rootView: Text(text)
+            .font(.system(size: 15, weight: .medium))
+            .padding(.horizontal, 18).padding(.vertical, 9)
+            .background(.regularMaterial, in: Capsule())
+            .accessibilityLabel(text))
+        toast.contentView = view
+        let size = view.fittingSize
+        if let v = NSScreen.main?.visibleFrame {
+            toast.setFrame(NSRect(x: v.midX - size.width / 2, y: v.minY + 80, width: size.width, height: size.height), display: true)
+        }
+        toast.alphaValue = 1
+        toast.orderFrontRegardless()
+        NSAccessibility.post(element: toast, notification: .announcementRequested,
+                             userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+        toastHide?.cancel()
+        let hide = DispatchWorkItem { [weak self] in
+            NSAnimationContext.runAnimationGroup({ $0.duration = 0.3; self?.toast.animator().alphaValue = 0 },
+                                                 completionHandler: { if self?.toast.alphaValue == 0 { self?.toast.orderOut(nil) } })
+        }
+        toastHide = hide
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: hide)
+    }
 
     // Same as .tabToWindow: give the app back key focus first, then press the keys.
     func pressInTarget(_ key: CGKeyCode, _ flags: CGEventFlags) {
@@ -1322,6 +1421,20 @@ enum Main {
         precondition(sp.typeDirection("j") && sp.text == "ar " && scrolled.last == .arrow(.bottom))
         sp.typeArrow("←")
         precondition(scrolled.last == .arrow(.left) && sp.text == "ar " && !sp.arrowKey("x"))
+        sp.text = "se"
+        precondition(sp.typeDirection("l") && sp.text == "se " && scrolled.last == .pressKeys(Command.selectKeys(.right)!))
+        precondition(sp.arrowKey("k") && scrolled.last == .pressKeys(Command.selectKeys(.top)!))
+        precondition(Command.parse("cp", d) == .keys(HotKey(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(cmdKey), label: "⌘ C")))
+        let opt: CGEventFlags = [.maskNumericPad, .maskSecondaryFn, .maskAlternate, .maskShift]
+        let plain: CGEventFlags = [.maskNumericPad, .maskSecondaryFn]
+        precondition(Command.parse("cp h", d) == .pressKeys([KeyPress(key: 123, flags: opt), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 124, flags: plain)]))
+        precondition(Command.parse("cp l", d) == .pressKeys([KeyPress(key: 124, flags: opt), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 123, flags: plain)]))
+        precondition(Command.parse("cu →", d) == .pressKeys([KeyPress(key: 124, flags: opt), KeyPress(key: 7, flags: .maskCommand)]))
+        if case .pressKeys(let k) = Command.parse("cp j", d) { precondition(k.count == 4 && k.last?.key == 124) } else { preconditionFailure() }
+        precondition(Command.parse("cp a", d) == .pressKeys([KeyPress(key: 0, flags: .maskCommand), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 124, flags: plain)]))
+        precondition(Command.parse("cu a", d) == .pressKeys([KeyPress(key: 0, flags: .maskCommand), KeyPress(key: 7, flags: .maskCommand)]))
+        precondition(Command.parse("cp k", d) == Command.parse("cp j", d) && Command.parse("cp x", d) == nil)
+        precondition(Command.parse("sa", d) == .keys(HotKey(keyCode: UInt32(kVK_ANSI_A), modifiers: UInt32(cmdKey), label: "⌘ A")))
         precondition(Command.parse("ar", d) == nil && Command.parse("ar h", d) == nil)
         // Return closes the bar without switching again; tn / tp still step one tab.
         var tabClosed = false, tabSubmitted: [String] = []
@@ -1338,10 +1451,10 @@ enum Main {
         let ghostty = [CommandDef(id: "a", trigger: "cp", shortcut: ctrlC), CommandDef(id: "b", trigger: "cl", shortcut: ctrlC)] + d
         precondition(Command.parse("cp", ghostty) == .keys(ctrlC) && Command.parse("cp x", ghostty) == nil)
         precondition(Command.parse("cl", ghostty) == .keys(ctrlC)) // the app's trigger wins over a built-in
-        precondition(Command.parse("cp", d) == nil)
+        precondition(Command.parse("cp", d) != .keys(ctrlC)) // elsewhere cp is the built-in Copy
         precondition(ctrlC.eventFlags == .maskControl)
         precondition(HotKey(keyCode: 0, modifiers: UInt32(cmdKey | shiftKey), label: "").eventFlags == [.maskCommand, .maskShift])
-        precondition(ghostty[0].title == "⌃ C" && CommandDef(id: "a", trigger: "cp", name: "Close process").title == "Close process")
+        precondition(ghostty[0].title == HotKey.display("⌃ C") && CommandDef(id: "a", trigger: "cp", name: "Close process").title == "Close process")
         precondition(Updater.isNewer("0.3.0", than: "0.2.0") && Updater.isNewer("0.10.0", than: "0.9.1"))
         precondition(!Updater.isNewer("0.2.0", than: "0.2.0") && !Updater.isNewer("0.2", than: "0.2.0") && !Updater.isNewer("0.1.9", than: "0.2.0"))
         let rel = #"{"tag_name":"v0.3.0","html_url":"https://github.com/POSTTTT/Normalcy/releases/tag/v0.3.0","assets":[{"name":"notes.txt","browser_download_url":"https://github.com/x"},{"name":"Normalcy-0.3.0.zip","browser_download_url":"https://github.com/POSTTTT/Normalcy/releases/download/v0.3.0/Normalcy-0.3.0.zip"}]}"#

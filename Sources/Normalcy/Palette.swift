@@ -155,15 +155,20 @@ final class Palette: ObservableObject {
     }
 
     // Arrow mode: once "ar " is typed, each direction key presses that arrow key in the front app
-    // right away and is never typed, like tab mode. Returns false when the key should be typed as usual.
+    // right away and is never typed, like tab mode. "se " selects instead: a word left or right
+    // per key, or the cursor's line.
+    // Returns false when the key should be typed as usual.
     var arrowMode: Bool {
         let words = text.split(separator: " ")
-        return words.count == 1 && text.hasSuffix(" ") && Command.lookup(String(words[0]), in: defs())?.id == Action.arrows.rawValue
+        guard words.count == 1, text.hasSuffix(" ") else { return false }
+        let id = Command.lookup(String(words[0]), in: defs())?.id
+        return id == Action.arrows.rawValue || id == Action.select.rawValue
     }
 
     func arrowKey(_ key: String) -> Bool {
         guard arrowMode, let dir = Command.direction(key, in: defs()) else { return false }
-        live(.arrow(dir))
+        let select = Command.lookup(String(text.dropLast()), in: defs())?.id == Action.select.rawValue
+        if select, let keys = Command.selectKeys(dir) { live(.pressKeys(keys)) } else { live(.arrow(dir)) }
         return true
     }
 

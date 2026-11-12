@@ -155,6 +155,7 @@ It isn't notarized either way: see [Install](#install) for opening a downloaded 
   that have one (Safari, Finder, Terminal, Ghostty and other apps using standard
   macOS tabs) and only when macOS is set to English.
 - `tn` and `tp` press Cmd+Shift+] and Cmd+Shift+[, so they only work in apps
-  that use those for next and previous tab. Likewise `bk` and `fw` press Cmd+[
+  that use those for next and previous tab. Likewise `nt` and `ct` press Cmd+T
+  and Cmd+W. And `bk` and `fw` press Cmd+[
   and Cmd+], standing in for a two-finger swipe, which apps can't be sent.
 - You can rename and hide the built-in commands, but you can't add new ones yet.

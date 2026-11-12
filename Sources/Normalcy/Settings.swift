@@ -2,7 +2,7 @@ import Carbon
 import SwiftUI
 
 enum Action: String, CaseIterable {
-    case open, focus, desktop, move, tab, nextTab, prevTab, tabs, back, forward, left, right, top, bottom, full, center
+    case open, focus, desktop, move, tab, newTab, closeTab, nextTab, prevTab, tabs, back, forward, left, right, top, bottom, full, center
     case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
     case grow, shrink, resize
     case scroll
@@ -19,6 +19,8 @@ enum Action: String, CaseIterable {
         case .desktop: "d"
         case .move: "m"
         case .tab: "t"
+        case .newTab: "nt"
+        case .closeTab: "ct"
         case .nextTab: "tn"
         case .prevTab: "tp"
         case .tabs: "ts"
@@ -55,6 +57,8 @@ enum Action: String, CaseIterable {
         case .desktop: "Go to Desktop"
         case .move: "Move Window to Desktop"
         case .tab: "Move Tab to New Window"
+        case .newTab: "New Tab"
+        case .closeTab: "Close Tab"
         case .nextTab: "Next Tab"
         case .prevTab: "Previous Tab"
         case .tabs: "Switch Tabs"
@@ -91,6 +95,8 @@ enum Action: String, CaseIterable {
         case .desktop: "rectangle.3.group"
         case .move: "rectangle.portrait.and.arrow.right"
         case .tab: "macwindow.badge.plus"
+        case .newTab: "plus.square"
+        case .closeTab: "xmark.square"
         case .nextTab: "arrow.right.square"
         case .prevTab: "arrow.left.square"
         case .tabs: "arrow.left.arrow.right.square"
@@ -127,7 +133,7 @@ enum Action: String, CaseIterable {
     var group: String {
         switch self {
         case .open, .focus: "Apps"
-        case .desktop, .move, .tab, .nextTab, .prevTab, .tabs, .back, .forward: "Desktops & Tabs"
+        case .desktop, .move, .tab, .newTab, .closeTab, .nextTab, .prevTab, .tabs, .back, .forward: "Desktops & Tabs"
         case .left, .right, .top, .bottom: "Halves"
         case .leftThird, .centerThird, .rightThird: "Thirds"
         case .topLeft, .topRight, .bottomLeft, .bottomRight: "Quarters"

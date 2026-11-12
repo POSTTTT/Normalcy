@@ -9,6 +9,7 @@ import SwiftUI
 //   d <1-9|h|l>    go to desktop N / left / right
 //   m <1-9|h|l>    move focused window to desktop N / left / right
 //   t [h|l|k|j|f|c]   move current tab to a new window, optionally placed with a layout
+//   nt ct          new / close tab
 //   tn tp          next / previous tab
 //   ts <h|l>…      previous / next tab as each key is pressed
 //   fw bk          forward / back, like a two-finger swipe
@@ -114,6 +115,9 @@ enum Command: Equatable {
             guard let d = lookup(arg, in: defs),
                   let rect = Action(rawValue: d.id).flatMap(layoutRect) else { return nil }
             return .tabToWindow(rect)
+        // Cmd+T / Cmd+W in the app in front, the same path as an app shortcut.
+        case .newTab: return .keys(HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(cmdKey), label: "⌘T"))
+        case .closeTab: return .keys(HotKey(keyCode: UInt32(kVK_ANSI_W), modifiers: UInt32(cmdKey), label: "⌘W"))
         case .nextTab: return .switchTab(next: true)
         case .prevTab: return .switchTab(next: false)
         case .forward: return .history(forward: true)
@@ -1053,6 +1057,8 @@ enum Main {
         precondition(Command.parse("t h", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
         precondition(Command.parse("t f", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 1, height: 1)))
         precondition(Command.parse("t x", d) == nil)
+        precondition(Command.parse("nt", d) == .keys(HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(cmdKey), label: "⌘T")))
+        precondition(Command.parse("ct", d) == .keys(HotKey(keyCode: UInt32(kVK_ANSI_W), modifiers: UInt32(cmdKey), label: "⌘W")))
         precondition(Command.parse("tn", d) == .switchTab(next: true))
         precondition(Command.parse("tp", d) == .switchTab(next: false))
         precondition(Command.parse("fw", d) == .history(forward: true))

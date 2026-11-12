@@ -62,6 +62,7 @@ Step sizes for `+` `-` and `re` are in Settings › Windows.
 | Trigger | Command | Input | What it does |
 | --- | --- | --- | --- |
 | `s` | Scroll | directions, as you press them | Scrolls the front window as each key is pressed, no Return needed. Hold a key to keep going. **Esc** stops |
+| `ar` | Arrow Keys | directions, as you press them | Presses the left, down, up or right arrow key in the front app as each key is pressed, no Return needed: `ar jjj` moves down three. **Return** or **Esc** closes the bar |
 
 ## Pointer
 

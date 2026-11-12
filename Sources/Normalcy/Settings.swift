@@ -5,7 +5,7 @@ enum Action: String, CaseIterable {
     case open, focus, desktop, move, tab, newTab, closeTab, nextTab, prevTab, tabs, back, forward, left, right, top, bottom, full, center
     case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
     case grow, shrink, resize
-    case scroll
+    case scroll, arrows
     case pointer, pointerStep, hints
     case settings
 
@@ -43,6 +43,7 @@ enum Action: String, CaseIterable {
         case .shrink: "-"
         case .resize: "re"
         case .scroll: "s"
+        case .arrows: "ar"
         case .pointer: "mo"
         case .pointerStep: "ms"
         case .hints: "cl"
@@ -81,6 +82,7 @@ enum Action: String, CaseIterable {
         case .shrink: "Make Smaller"
         case .resize: "Resize by Direction"
         case .scroll: "Scroll"
+        case .arrows: "Arrow Keys"
         case .pointer: "Pointer by Halves"
         case .pointerStep: "Pointer by Steps"
         case .hints: "Click by Label"
@@ -119,6 +121,7 @@ enum Action: String, CaseIterable {
         case .shrink: "arrow.down.right.and.arrow.up.left"
         case .resize: "arrow.up.and.down.and.arrow.left.and.right"
         case .scroll: "scroll"
+        case .arrows: "arrowkeys"
         case .pointer: "cursorarrow.rays"
         case .pointerStep: "cursorarrow.motionlines"
         case .hints: "cursorarrow.click"
@@ -139,7 +142,7 @@ enum Action: String, CaseIterable {
         case .topLeft, .topRight, .bottomLeft, .bottomRight: "Quarters"
         case .full, .center: "Fill & Center"
         case .grow, .shrink, .resize: "Resize"
-        case .scroll: "Scroll"
+        case .scroll, .arrows: "Scroll"
         case .pointer, .pointerStep, .hints: "Pointer"
         case .settings: "Other"
         }
@@ -155,6 +158,7 @@ enum Action: String, CaseIterable {
         case .resize: "<left> <right> <up> <down>"
         case .scroll: "<down> <up> <left> <right>"
         case .tabs: "<left> <right>"
+        case .arrows: "<left> <down> <up> <right>"
         case .pointer, .pointerStep: "<left> <down> <up> <right>"
         case .hints: "label"
         default: nil
@@ -168,7 +172,7 @@ enum Action: String, CaseIterable {
         case .focus: "app or direction"
         case .desktop, .move: "number or direction"
         case .tab: "position"
-        case .resize, .scroll, .tabs: "direction"
+        case .resize, .scroll, .tabs, .arrows: "direction"
         case .pointer, .pointerStep: "direction, Return clicks"
         case .hints: "label"
         default: nil

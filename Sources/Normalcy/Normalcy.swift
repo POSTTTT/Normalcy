@@ -18,6 +18,7 @@ import SwiftUI
 //   + -            window: 10% bigger / smaller, staying centered
 //   re <h|l|k|j>…  window: narrower / wider / shorter / taller, one step per key
 //   s <j|k|h|l>…   scroll the window down / up / left / right as each key is pressed
+//   ar <h|j|k|l>…  press the left / down / up / right arrow key as each key is pressed
 //   cl <label>     click what that label sits on in the front window
 //   set            open settings
 enum Command: Equatable {
@@ -28,6 +29,7 @@ enum Command: Equatable {
     case moveToDesktop(CGKeyCode)
     case tabToWindow(CGRect?) // optional layout for the new window
     case switchTab(next: Bool)
+    case arrow(Action) // an arrow key: .left / .bottom / .top / .right
     case history(forward: Bool)
     case layout(CGRect) // fractions of the screen, top-left origin
     case resize(Int) // steps bigger (or smaller, if negative) around the window's center
@@ -134,6 +136,7 @@ enum Command: Equatable {
             case "2": return .click(right: false, count: 2)
             default: return nil
             }
+        case .arrows: return nil // arrow keys are pressed as keys are typed; Return only closes the bar
         case .tabs: return nil // tabs switch as keys are pressed; Return only closes the bar
         case .hints: return nil // the labels live in the bar; it clicks once one is typed
         case .settings: return .settings
@@ -382,6 +385,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if case .switchTab(let next) = cmd, let pid = target?.processIdentifier {
                 return pressKey(next ? 30 : 33, [.maskCommand, .maskShift], to: pid)
             }
+            if case .arrow(let dir) = cmd, let pid = target?.processIdentifier {
+                return pressKey(Self.arrowKeyCode(dir), Self.arrowFlags, to: pid)
+            }
             run(cmd)
         }
         // The front app's own shortcuts come first, so they win a trigger shared with a built-in.
@@ -613,6 +619,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .switchTab(let next):
             // Cmd+Shift+] / [: next / previous tab in Safari, Chrome, Firefox, Finder, Terminal and VS Code.
             pressInTarget(next ? 30 : 33, [.maskCommand, .maskShift]) // kVK_ANSI_RightBracket / LeftBracket
+        case .arrow(let dir):
+            pressInTarget(Self.arrowKeyCode(dir), Self.arrowFlags)
         case .keys(let k):
             pressInTarget(CGKeyCode(k.keyCode), k.eventFlags)
         case .history(let forward):
@@ -623,6 +631,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             openSettings()
         }
     }
+
+    // kVK_LeftArrow, kVK_DownArrow, kVK_UpArrow, kVK_RightArrow
+    static func arrowKeyCode(_ dir: Action) -> CGKeyCode {
+        switch dir { case .left: 123; case .bottom: 125; case .top: 126; default: 124 }
+    }
+    // A real arrow key press carries these; some apps check for them.
+    static let arrowFlags: CGEventFlags = [.maskNumericPad, .maskSecondaryFn]
 
     // Same as .tabToWindow: give the app back key focus first, then press the keys.
     func pressInTarget(_ key: CGKeyCode, _ flags: CGEventFlags) {
@@ -1298,6 +1313,12 @@ enum Main {
         sp.typeArrow("←")
         precondition(scrolled.last == .switchTab(next: false) && sp.text == "ts ")
         precondition(!sp.tabKey("j") && !sp.tabKey("x"))
+        // Arrow mode: "ar " presses an arrow key for each direction key; other keys type as usual.
+        sp.text = "ar"
+        precondition(sp.typeDirection("j") && sp.text == "ar " && scrolled.last == .arrow(.bottom))
+        sp.typeArrow("←")
+        precondition(scrolled.last == .arrow(.left) && sp.text == "ar " && !sp.arrowKey("x"))
+        precondition(Command.parse("ar", d) == nil && Command.parse("ar h", d) == nil)
         // Return closes the bar without switching again; tn / tp still step one tab.
         var tabClosed = false, tabSubmitted: [String] = []
         sp.cancel = { tabClosed = true }

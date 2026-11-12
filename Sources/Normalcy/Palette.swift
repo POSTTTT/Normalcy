@@ -154,6 +154,19 @@ final class Palette: ObservableObject {
         return true
     }
 
+    // Arrow mode: once "ar " is typed, each direction key presses that arrow key in the front app
+    // right away and is never typed, like tab mode. Returns false when the key should be typed as usual.
+    var arrowMode: Bool {
+        let words = text.split(separator: " ")
+        return words.count == 1 && text.hasSuffix(" ") && Command.lookup(String(words[0]), in: defs())?.id == Action.arrows.rawValue
+    }
+
+    func arrowKey(_ key: String) -> Bool {
+        guard arrowMode, let dir = Command.direction(key, in: defs()) else { return false }
+        live(.arrow(dir))
+        return true
+    }
+
     // The pointer command typed with a space after it, ready for direction keys.
     var pointerMode: Action? {
         let words = text.split(separator: " ")
@@ -257,14 +270,14 @@ final class Palette: ObservableObject {
     // text plus the key starts another trigger. Returns false when the key should be typed as usual.
     func typeDirection(_ key: String) -> Bool {
         let defs = defs()
-        if scrollKey(key) || tabKey(key) || pointerKey(key) { return true }
+        if scrollKey(key) || tabKey(key) || arrowKey(key) || pointerKey(key) { return true }
         guard let head = defs.first(where: { $0.enabled && $0.trigger == text }).flatMap({ Action(rawValue: $0.id) }) else { return false }
         // mo and ms may have their own direction keys.
         if head == .hints { return false } // "cl" + h would click label h at once
         let isDirection = head == .pointer || head == .pointerStep ? pointerDirection(key) != nil : Command.direction(key, in: defs) != nil
         guard isDirection, head.argHint != nil, !defs.contains(where: { $0.enabled && $0.trigger.hasPrefix(text + key) }) else { return false }
         text += " "
-        if !scrollKey(key), !tabKey(key), !pointerKey(key) { text += key }
+        if !scrollKey(key), !tabKey(key), !arrowKey(key), !pointerKey(key) { text += key }
         return true
     }
 
@@ -320,8 +333,8 @@ final class Palette: ObservableObject {
     // Shift+Enter does the same but keeps going: the bar comes back for another command.
     func enter(continuing: Bool = false) {
         let run = continuing ? submitContinuing : submit
-        // Return in tab mode just closes the bar: the tabs already switched as keys were pressed.
-        if !continuing, tabMode { return cancel() }
+        // Return in tab or arrow mode just closes the bar: the keys already went to the app.
+        if !continuing, tabMode || arrowMode { return cancel() }
         defer { pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1) } // the next "mo " starts from the whole screen
         // Picking from the app list switches to the highlighted app.
         if let list = appMatches, list.indices.contains(selected), let head = text.split(separator: " ").first {

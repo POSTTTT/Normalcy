@@ -21,7 +21,8 @@ import SwiftUI
 //   ar <h|j|k|l>…  press the left / down / up / right arrow key as each key is pressed
 //   se <h|l|j>…    select a word before / after the cursor, or its line, as each key is pressed
 //   cp cu pa sa    copy / cut / paste / select all
-//   cp cu <h|l|j|a>  copy / cut the word before / after the cursor, its line, or everything
+//   cp cu <h|l|j|a>  copy / cut to the word's start / end, the cursor's line, or everything
+//   cpw cuw <h|l>  copy / cut the whole word the cursor is in, before or after it
 //   cl <label>     click what that label sits on in the front window
 //   set            open settings
 struct KeyPress: Equatable {
@@ -30,6 +31,19 @@ struct KeyPress: Equatable {
 }
 
 enum Command: Equatable {
+    // The whole word, even from the middle of it: move to one end, then select to the other.
+    // .left the word the cursor is in or just after, .right the one it's in or just before.
+    static func wordKeys(_ dir: Action) -> [KeyPress]? {
+        let arrow: CGEventFlags = [.maskNumericPad, .maskSecondaryFn]
+        let (from, to): (CGKeyCode, CGKeyCode) // kVK_LeftArrow 123, kVK_RightArrow 124
+        switch dir {
+        case .left: (from, to) = (123, 124)
+        case .right: (from, to) = (124, 123)
+        default: return nil
+        }
+        return [KeyPress(key: from, flags: arrow.union(.maskAlternate)), KeyPress(key: to, flags: arrow.union([.maskAlternate, .maskShift]))]
+    }
+
     // Keys that select, the way you would by hand: .left the word before the cursor (or one more
     // word, if a selection is going), .right the word after, .top / .bottom the whole line the
     // cursor is in, without its line break. Used by "cp" / "cu" with a direction, and by "se".
@@ -160,10 +174,16 @@ enum Command: Equatable {
             default: return nil
             }
         // Cmd+C / X / V / A in the app in front, the same path as an app shortcut.
+        case .copyWord, .cutWord:
+            // "cpw h" / "cpw l": the whole word, even from the middle of it.
+            guard let dir = direction(arg, in: defs), let select = wordKeys(dir) else { return nil }
+            let copy = action == .copyWord
+            return .pressKeys(select + [KeyPress(key: copy ? 8 : 7, flags: .maskCommand)]
+                              + (copy ? [KeyPress(key: dir == .right ? 123 : 124, flags: [.maskNumericPad, .maskSecondaryFn])] : []))
         case .copy, .cut:
             let key: CGKeyCode = action == .copy ? 8 : 7 // kVK_ANSI_C, kVK_ANSI_X
             if arg.isEmpty { return .keys(HotKey(keyCode: UInt32(key), modifiers: UInt32(cmdKey), label: action == .copy ? "⌘ C" : "⌘ X")) }
-            // "cp a": everything, by Cmd+A. Otherwise a word or the line, by direction.
+            // "cp a": everything, by Cmd+A. Otherwise from the cursor to the word's start or end, or the line.
             let dir = arg == "a" ? .right : direction(arg, in: defs)
             guard let dir, let select = arg == "a" ? [KeyPress(key: 0, flags: .maskCommand)] : selectKeys(dir) else { return nil } // kVK_ANSI_A
             // After a copy, a plain arrow drops the highlight, leaving the cursor where it was: at the
@@ -1427,9 +1447,13 @@ enum Main {
         precondition(Command.parse("cp", d) == .keys(HotKey(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(cmdKey), label: "⌘ C")))
         let opt: CGEventFlags = [.maskNumericPad, .maskSecondaryFn, .maskAlternate, .maskShift]
         let plain: CGEventFlags = [.maskNumericPad, .maskSecondaryFn]
+        let move: CGEventFlags = [.maskNumericPad, .maskSecondaryFn, .maskAlternate]
         precondition(Command.parse("cp h", d) == .pressKeys([KeyPress(key: 123, flags: opt), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 124, flags: plain)]))
-        precondition(Command.parse("cp l", d) == .pressKeys([KeyPress(key: 124, flags: opt), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 123, flags: plain)]))
+        precondition(Command.parse("cpw h", d) == .pressKeys([KeyPress(key: 123, flags: move), KeyPress(key: 124, flags: opt), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 124, flags: plain)]))
+        precondition(Command.parse("cpw l", d) == .pressKeys([KeyPress(key: 124, flags: move), KeyPress(key: 123, flags: opt), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 123, flags: plain)]))
+        precondition(Command.parse("cpw", d) == nil && Command.parse("cpw j", d) == nil)
         precondition(Command.parse("cu →", d) == .pressKeys([KeyPress(key: 124, flags: opt), KeyPress(key: 7, flags: .maskCommand)]))
+        precondition(Command.parse("cuw →", d) == .pressKeys([KeyPress(key: 124, flags: move), KeyPress(key: 123, flags: opt), KeyPress(key: 7, flags: .maskCommand)]))
         if case .pressKeys(let k) = Command.parse("cp j", d) { precondition(k.count == 4 && k.last?.key == 124) } else { preconditionFailure() }
         precondition(Command.parse("cp a", d) == .pressKeys([KeyPress(key: 0, flags: .maskCommand), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 124, flags: plain)]))
         precondition(Command.parse("cu a", d) == .pressKeys([KeyPress(key: 0, flags: .maskCommand), KeyPress(key: 7, flags: .maskCommand)]))

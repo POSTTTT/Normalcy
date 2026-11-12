@@ -41,8 +41,10 @@ After `cp`, `cu` or `pa`, a note at the bottom of the screen says **Copied**, **
 
 | Trigger | Command | Input | What it does |
 | --- | --- | --- | --- |
-| `cp` | Copy | optional: `h`, `l`, `j` / `k`, or `a` | Copies the selection in the front app (presses Cmd+C). `cp h` copies the word before the cursor, `cp l` the word after it, `cp j` or `cp k` the whole line it's in, `cp a` everything. The text isn't left highlighted: the cursor ends up where it was, or at the end of the line |
+| `cp` | Copy | optional: `h`, `l`, `j` / `k`, or `a` | Copies the selection in the front app (presses Cmd+C). `cp h` copies from the cursor back to the start of the word, `cp l` on to its end (so from the middle of "complicated", only part of it), `cp j` or `cp k` the whole line it's in, `cp a` everything. The text isn't left highlighted: the cursor ends up where it was, or at the end of the line |
 | `cu` | Cut | optional: `h`, `l`, `j` / `k`, or `a` | Cuts the selection in the front app (presses Cmd+X). `cu h`, `cu l`, `cu j` and `cu a` cut the word before, the word after, the line, or everything, like `cp` |
+| `cpw` | Copy Whole Word | `h` or `l` | Copies the whole word the cursor is in, even from its middle. Just after a word, `cpw h` takes it; just before one, `cpw l` |
+| `cuw` | Cut Whole Word | `h` or `l` | Cuts the whole word, like `cpw` |
 | `pa` | Paste | none | Pastes in the front app (presses Cmd+V) |
 | `sa` | Select All | none | Selects everything in the front app (presses Cmd+A) |
 | `se` | Select | `h`, `l`, `j` / `k`, as you press them | Selects as each key is pressed, no Return needed: `h` the word before the cursor, `l` the word after, and each more `h` or `l` adds a word that way: `se lll` selects three words. `j` or `k` selects the whole line the cursor is in. **Return** or **Esc** closes the bar |

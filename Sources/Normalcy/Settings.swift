@@ -6,7 +6,7 @@ enum Action: String, CaseIterable {
     case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
     case grow, shrink, resize
     case scroll, arrows
-    case copy, cut, paste, selectAll, select
+    case copy, cut, copyWord, cutWord, paste, selectAll, select
     case pointer, pointerStep, hints
     case settings
 
@@ -46,6 +46,8 @@ enum Action: String, CaseIterable {
         case .scroll: "s"
         case .arrows: "ar"
         case .copy: "cp"
+        case .copyWord: "cpw"
+        case .cutWord: "cuw"
         case .cut: "cu"
         case .paste: "pa"
         case .selectAll: "sa"
@@ -90,6 +92,8 @@ enum Action: String, CaseIterable {
         case .scroll: "Scroll"
         case .arrows: "Arrow Keys"
         case .copy: "Copy"
+        case .copyWord: "Copy Whole Word"
+        case .cutWord: "Cut Whole Word"
         case .cut: "Cut"
         case .paste: "Paste"
         case .selectAll: "Select All"
@@ -134,6 +138,8 @@ enum Action: String, CaseIterable {
         case .scroll: "scroll"
         case .arrows: "arrowkeys"
         case .copy: "doc.on.doc"
+        case .copyWord: "doc.on.doc.fill"
+        case .cutWord: "scissors.circle"
         case .cut: "scissors"
         case .paste: "doc.on.clipboard"
         case .selectAll: "selection.pin.in.out"
@@ -159,7 +165,7 @@ enum Action: String, CaseIterable {
         case .full, .center: "Fill & Center"
         case .grow, .shrink, .resize: "Resize"
         case .scroll, .arrows: "Scroll"
-        case .copy, .cut, .paste, .selectAll, .select: "Edit"
+        case .copy, .cut, .copyWord, .cutWord, .paste, .selectAll, .select: "Edit"
         case .pointer, .pointerStep, .hints: "Pointer"
         case .settings: "Other"
         }
@@ -177,6 +183,7 @@ enum Action: String, CaseIterable {
         case .tabs: "<left> <right>"
         case .arrows: "<left> <down> <up> <right>"
         case .copy, .cut: "<left> <right> <down> a"
+        case .copyWord, .cutWord: "<left> <right>"
         case .select: "<left> <right> <down>"
         case .pointer, .pointerStep: "<left> <down> <up> <right>"
         case .hints: "label"
@@ -193,6 +200,7 @@ enum Action: String, CaseIterable {
         case .tab: "position"
         case .resize, .scroll, .tabs, .arrows: "direction"
         case .copy, .cut: "word, line or a for all"
+        case .copyWord, .cutWord: "direction"
         case .select: "word or line"
         case .pointer, .pointerStep: "direction, Return clicks"
         case .hints: "label"

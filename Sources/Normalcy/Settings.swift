@@ -6,7 +6,7 @@ enum Action: String, CaseIterable {
     case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
     case grow, shrink, resize
     case scroll, arrows
-    case copy, cut, copyWord, cutWord, paste, selectAll, select
+    case copy, cut, copyWord, cutWord, paste, selectAll, select, lineStart, lineEnd
     case pointer, pointerStep, hints
     case settings
 
@@ -47,6 +47,8 @@ enum Action: String, CaseIterable {
         case .arrows: "ar"
         case .copy: "cp"
         case .copyWord: "cpw"
+        case .lineStart: "ls"
+        case .lineEnd: "le"
         case .cutWord: "cuw"
         case .cut: "cu"
         case .paste: "pa"
@@ -93,6 +95,8 @@ enum Action: String, CaseIterable {
         case .arrows: "Arrow Keys"
         case .copy: "Copy"
         case .copyWord: "Copy Whole Word"
+        case .lineStart: "Start of Line"
+        case .lineEnd: "End of Line"
         case .cutWord: "Cut Whole Word"
         case .cut: "Cut"
         case .paste: "Paste"
@@ -139,6 +143,8 @@ enum Action: String, CaseIterable {
         case .arrows: "arrowkeys"
         case .copy: "doc.on.doc"
         case .copyWord: "doc.on.doc.fill"
+        case .lineStart: "arrow.left.to.line"
+        case .lineEnd: "arrow.right.to.line"
         case .cutWord: "scissors.circle"
         case .cut: "scissors"
         case .paste: "doc.on.clipboard"
@@ -165,7 +171,7 @@ enum Action: String, CaseIterable {
         case .full, .center: "Fill & Center"
         case .grow, .shrink, .resize: "Resize"
         case .scroll, .arrows: "Scroll"
-        case .copy, .cut, .copyWord, .cutWord, .paste, .selectAll, .select: "Edit"
+        case .copy, .cut, .copyWord, .cutWord, .paste, .selectAll, .select, .lineStart, .lineEnd: "Edit"
         case .pointer, .pointerStep, .hints: "Pointer"
         case .settings: "Other"
         }

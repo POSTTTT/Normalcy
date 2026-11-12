@@ -22,6 +22,7 @@ import SwiftUI
 //   se <h|l|j>…    select a word before / after the cursor, or its line, as each key is pressed
 //   cp cu pa sa    copy / cut / paste / select all
 //   cp cu <h|l|j|a>  copy / cut to the word's start / end, the cursor's line, or everything
+//   ls le          go to the start / end of the line
 //   cpw cuw <h|l>  copy / cut the whole word the cursor is in, before or after it
 //   cl <label>     click what that label sits on in the front window
 //   set            open settings
@@ -174,6 +175,9 @@ enum Command: Equatable {
             default: return nil
             }
         // Cmd+C / X / V / A in the app in front, the same path as an app shortcut.
+        // Cmd+Left / Right: the start or end of the line the cursor is in.
+        case .lineStart, .lineEnd:
+            return arg.isEmpty ? .pressKeys([KeyPress(key: action == .lineStart ? 123 : 124, flags: [.maskNumericPad, .maskSecondaryFn, .maskCommand])]) : nil
         case .copyWord, .cutWord:
             // "cpw h" / "cpw l": the whole word, even from the middle of it.
             guard let dir = direction(arg, in: defs), let select = wordKeys(dir) else { return nil }
@@ -429,7 +433,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let wait: Double = switch cmd {
             case .ctrlKey, .moveToDesktop: 1.5
             case .tabToWindow, .open: 0.6
-            case .switchTab, .history, .keys, .pressKeys: 0.35
+            case .switchTab, .history: 0.35
+            case .keys, .pressKeys: 0.6 // after pressAndConfirm's keys, up to 4 of them
             default: 0.2
             }
             scheduleRefocus(after: wait)
@@ -534,6 +539,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     // Closing stays instant: a fading bar would get caught in a desktop switch.
     func hide() {
+        steppedAside = false
         panel.orderOut(nil)
         preview.orderOut(nil)
         // Drop the last command's preview box now, unanimated, so it never shows on the next open.
@@ -611,9 +617,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: w)
     }
 
+    var steppedAside = false // the bar hid for pressAndConfirm's keys and comes back on refocus
+
     func refocus() {
         continuing = false
-        guard panel.isVisible else { return }
+        guard panel.isVisible || steppedAside else { return }
+        steppedAside = false
         target = NSWorkspace.shared.frontmostApplication
         captureWindow()
         palette.apps = runningApps()
@@ -704,19 +713,23 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // Like pressInTarget, for several keys. Cmd+C / X / V among them shows "Copied", "Cut" or
     // "Pasted"; copy and cut only once the clipboard has changed, so with nothing selected, nothing shows.
     func pressAndConfirm(_ keys: [KeyPress]) {
+        // After Shift+Return the bar is still up and holds the keyboard, so the app in front gets
+        // the keys without its window focused: a page like Google Docs never sees them, and Safari
+        // takes Cmd+→ as Forward. Step the bar aside; refocus brings it back.
+        if continuing, panel.isVisible { steppedAside = true; panel.orderOut(nil) }
         let before = NSPasteboard.general.changeCount
         let edit = keys.first { $0.flags == .maskCommand && [7, 8, 9].contains($0.key) }?.key // kVK_ANSI_X, C, V
         target?.activate()
         // A gap between keys: browsers apply a selection in the page asynchronously, while Cmd+C
         // goes through the Edit menu at once, so without it the copy beats the selection.
         // shortcut: fixed 80 ms gaps; lengthen if a slow app still copies too early.
-        let gap = 0.08
+        let gap = 0.08, start = 0.15
         for (i, k) in keys.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15 + gap * Double(i)) { self.pressKey(k.key, k.flags) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + start + gap * Double(i)) { self.pressKey(k.key, k.flags) }
         }
         guard let edit else { return }
         // Then a wait for the app to fill the clipboard.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15 + gap * Double(keys.count) + 0.25) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + start + gap * Double(keys.count) + 0.25) {
             if edit == 9 { self.showToast("Pasted") }
             else if NSPasteboard.general.changeCount != before { self.showToast(edit == 8 ? "Copied" : "Cut") }
         }
@@ -1451,6 +1464,8 @@ enum Main {
         precondition(Command.parse("cp h", d) == .pressKeys([KeyPress(key: 123, flags: opt), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 124, flags: plain)]))
         precondition(Command.parse("cpw h", d) == .pressKeys([KeyPress(key: 123, flags: move), KeyPress(key: 124, flags: opt), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 124, flags: plain)]))
         precondition(Command.parse("cpw l", d) == .pressKeys([KeyPress(key: 124, flags: move), KeyPress(key: 123, flags: opt), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 123, flags: plain)]))
+        precondition(Command.parse("ls", d) == .pressKeys([KeyPress(key: 123, flags: [.maskNumericPad, .maskSecondaryFn, .maskCommand])]))
+        precondition(Command.parse("le", d) == .pressKeys([KeyPress(key: 124, flags: [.maskNumericPad, .maskSecondaryFn, .maskCommand])]))
         precondition(Command.parse("cpw", d) == nil && Command.parse("cpw j", d) == nil)
         precondition(Command.parse("cu →", d) == .pressKeys([KeyPress(key: 124, flags: opt), KeyPress(key: 7, flags: .maskCommand)]))
         precondition(Command.parse("cuw →", d) == .pressKeys([KeyPress(key: 124, flags: move), KeyPress(key: 123, flags: opt), KeyPress(key: 7, flags: .maskCommand)]))

@@ -333,9 +333,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc func openSettings() {
-        NSApp.activate()
-        settingsWindow.center()
-        settingsWindow.makeKeyAndOrderFront(nil)
+        let w = settingsWindow
+        // Still open on another desktop, it would take you there; close it so it opens on this one.
+        if w.isVisible && !w.isOnActiveSpace { w.orderOut(nil) }
+        // Center on the screen you're working on, not the one it was last on.
+        if let s = NSScreen.main, w.screen != s { w.setFrameOrigin(NSPoint(x: s.visibleFrame.midX, y: s.visibleFrame.midY)) }
+        w.center()
+        // The plain activate() is only a request, and macOS can turn it down once the bar has
+        // hidden, leaving Settings behind the app in front.
+        NSApp.activate(ignoringOtherApps: true)
+        w.makeKeyAndOrderFront(nil)
+        w.orderFrontRegardless()
     }
 
     func buildPanel() {

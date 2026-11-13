@@ -550,35 +550,15 @@ struct PaletteView: View {
         let items = Array(rows.enumerated())
         switch store.listStyle {
         case .grid:
-            // Runs of window commands become tile grids; everything else stays a row.
-            let runs = items.reduce(into: [[(offset: Int, element: CommandDef)]]()) { runs, item in
-                let tile = Action(rawValue: item.element.id)?.isWindow == true
-                if let last = runs.last?.last, (Action(rawValue: last.element.id)?.isWindow == true) == tile {
-                    runs[runs.count - 1].append(item)
-                } else { runs.append([item]) }
-            }
-            VStack(spacing: 2) {
-                ForEach(runs, id: \.first!.element.id) { run in
-                    if Action(rawValue: run[0].element.id)?.isWindow == true {
-                        sectionHeader("Windows", first: run[0].offset == 0)
-                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(60), spacing: 6), count: 8), spacing: 6) {
-                            ForEach(run, id: \.element.id) { i, d in tile(i, d) }
+            // As tall as it needs while it fits on screen; past that it scrolls, following the highlight.
+            ViewThatFits(in: .vertical) {
+                grid(items)
+                ScrollViewReader { scroll in
+                    ScrollView { grid(items) }
+                        .scrollIndicators(.never)
+                        .onChange(of: model.selected) {
+                            if rows.indices.contains(model.selected) { scroll.scrollTo(rows[model.selected].id) }
                         }
-                        .padding(.bottom, 4)
-                        // Tiles have no titles; name the highlighted one, with what it does.
-                        Group {
-                            if let sel = run.first(where: { $0.offset == model.selected }) {
-                                Text(sel.element.title)
-                            } else {
-                                Text("Use Tab to see each name")
-                            }
-                        }
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                        .frame(height: 18)
-                        .padding(.bottom, 6)
-                    } else {
-                        ForEach(run, id: \.element.id) { i, d in tappableRow(i, d, height: 40) }
-                    }
                 }
             }
         case .grouped:
@@ -601,6 +581,40 @@ struct PaletteView: View {
                 .frame(height: min(CGFloat(items.count) * 34 + CGFloat(headerAt.count) * 28, 440))
                 .onChange(of: model.selected) {
                     if rows.indices.contains(model.selected) { scroll.scrollTo(rows[model.selected].id) }
+                }
+            }
+        }
+    }
+
+    // Runs of window commands become tile grids; everything else stays a row.
+    func grid(_ items: [(offset: Int, element: CommandDef)]) -> some View {
+        let runs = items.reduce(into: [[(offset: Int, element: CommandDef)]]()) { runs, item in
+            let tile = Action(rawValue: item.element.id)?.isWindow == true
+            if let last = runs.last?.last, (Action(rawValue: last.element.id)?.isWindow == true) == tile {
+                runs[runs.count - 1].append(item)
+            } else { runs.append([item]) }
+        }
+        return VStack(spacing: 2) {
+            ForEach(runs, id: \.first!.element.id) { run in
+                if Action(rawValue: run[0].element.id)?.isWindow == true {
+                    sectionHeader("Windows", first: run[0].offset == 0)
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(60), spacing: 6), count: 8), spacing: 6) {
+                        ForEach(run, id: \.element.id) { i, d in tile(i, d).id(d.id) }
+                    }
+                    .padding(.bottom, 4)
+                    // Tiles have no titles; name the highlighted one, with what it does.
+                    Group {
+                        if let sel = run.first(where: { $0.offset == model.selected }) {
+                            Text(sel.element.title)
+                        } else {
+                            Text("Use Tab to see each name")
+                        }
+                    }
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .frame(height: 18)
+                    .padding(.bottom, 6)
+                } else {
+                    ForEach(run, id: \.element.id) { i, d in tappableRow(i, d, height: 40).id(d.id) }
                 }
             }
         }

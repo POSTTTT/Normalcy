@@ -45,6 +45,7 @@ After `cp`, `cu` or `pa`, a note at the bottom of the screen says **Copied**, **
 | `cu` | Cut | optional: `h`, `l`, `j` / `k`, or `a` | Cuts the selection in the front app (presses Cmd+X). `cu h`, `cu l`, `cu j` and `cu a` cut the word before, the word after, the line, or everything, like `cp` |
 | `cpw` | Copy Whole Word | `h` or `l` | Copies the whole word the cursor is in, even from its middle. Just after a word, `cpw h` takes it; just before one, `cpw l` |
 | `cuw` | Cut Whole Word | `h` or `l` | Cuts the whole word, like `cpw` |
+| `ds` | Deselect | optional: `h` or `l` | Drops the highlight, leaving the cursor at the end of what was selected (presses →). `ds h` leaves it at the start (presses ←) |
 | `ls` | Start of Line | none | Puts the cursor at the start of its line (presses Cmd+←) |
 | `le` | End of Line | none | Puts the cursor at the end of its line (presses Cmd+→) |
 | `pa` | Paste | none | Pastes in the front app (presses Cmd+V) |

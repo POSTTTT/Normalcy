@@ -23,6 +23,7 @@ import SwiftUI
 //   cp cu pa sa    copy / cut / paste / select all
 //   cp cu <h|l|j|a>  copy / cut to the word's start / end, the cursor's line, or everything
 //   ls le          go to the start / end of the line
+//   ds [h]         deselect, leaving the cursor at the selection's end (or start)
 //   cpw cuw <h|l>  copy / cut the whole word the cursor is in, before or after it
 //   cl <label>     click what that label sits on in the front window
 //   set            open settings
@@ -178,6 +179,11 @@ enum Command: Equatable {
         // Cmd+Left / Right: the start or end of the line the cursor is in.
         case .lineStart, .lineEnd:
             return arg.isEmpty ? .pressKeys([KeyPress(key: action == .lineStart ? 123 : 124, flags: [.maskNumericPad, .maskSecondaryFn, .maskCommand])]) : nil
+        // A plain arrow drops the highlight: "ds" leaves the cursor at the selection's end, "ds h" its start.
+        case .deselect:
+            let dir = arg.isEmpty ? .right : direction(arg, in: defs)
+            guard dir == .left || dir == .right else { return nil }
+            return .pressKeys([KeyPress(key: dir == .left ? 123 : 124, flags: [.maskNumericPad, .maskSecondaryFn])])
         case .copyWord, .cutWord:
             // "cpw h" / "cpw l": the whole word, even from the middle of it.
             guard let dir = direction(arg, in: defs), let select = wordKeys(dir) else { return nil }
@@ -1464,6 +1470,9 @@ enum Main {
         precondition(Command.parse("cp h", d) == .pressKeys([KeyPress(key: 123, flags: opt), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 124, flags: plain)]))
         precondition(Command.parse("cpw h", d) == .pressKeys([KeyPress(key: 123, flags: move), KeyPress(key: 124, flags: opt), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 124, flags: plain)]))
         precondition(Command.parse("cpw l", d) == .pressKeys([KeyPress(key: 124, flags: move), KeyPress(key: 123, flags: opt), KeyPress(key: 8, flags: .maskCommand), KeyPress(key: 123, flags: plain)]))
+        precondition(Command.parse("ds", d) == .pressKeys([KeyPress(key: 124, flags: [.maskNumericPad, .maskSecondaryFn])]))
+        precondition(Command.parse("ds h", d) == .pressKeys([KeyPress(key: 123, flags: [.maskNumericPad, .maskSecondaryFn])]))
+        precondition(Command.parse("ds j", d) == nil)
         precondition(Command.parse("ls", d) == .pressKeys([KeyPress(key: 123, flags: [.maskNumericPad, .maskSecondaryFn, .maskCommand])]))
         precondition(Command.parse("le", d) == .pressKeys([KeyPress(key: 124, flags: [.maskNumericPad, .maskSecondaryFn, .maskCommand])]))
         precondition(Command.parse("cpw", d) == nil && Command.parse("cpw j", d) == nil)

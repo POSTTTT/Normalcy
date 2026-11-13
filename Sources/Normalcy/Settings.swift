@@ -6,7 +6,7 @@ enum Action: String, CaseIterable {
     case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
     case grow, shrink, resize
     case scroll, arrows
-    case copy, cut, copyWord, cutWord, paste, selectAll, select, deselect, lineStart, lineEnd
+    case copy, cut, copyWord, cutWord, paste, undo, redo, selectAll, select, deselect, lineStart, lineEnd
     case pointer, pointerStep, hints
     case settings
 
@@ -53,6 +53,8 @@ enum Action: String, CaseIterable {
         case .cutWord: "cuw"
         case .cut: "cu"
         case .paste: "pa"
+        case .undo: "u"
+        case .redo: "rd"
         case .selectAll: "sa"
         case .select: "se"
         case .pointer: "mo"
@@ -102,6 +104,8 @@ enum Action: String, CaseIterable {
         case .cutWord: "Cut Whole Word"
         case .cut: "Cut"
         case .paste: "Paste"
+        case .undo: "Undo"
+        case .redo: "Redo"
         case .selectAll: "Select All"
         case .select: "Select"
         case .pointer: "Pointer by Halves"
@@ -151,6 +155,8 @@ enum Action: String, CaseIterable {
         case .cutWord: "scissors.circle"
         case .cut: "scissors"
         case .paste: "doc.on.clipboard"
+        case .undo: "arrow.uturn.backward"
+        case .redo: "arrow.uturn.forward"
         case .selectAll: "selection.pin.in.out"
         case .select: "character.cursor.ibeam"
         case .pointer: "cursorarrow.rays"
@@ -174,7 +180,7 @@ enum Action: String, CaseIterable {
         case .full, .center: "Fill & Center"
         case .grow, .shrink, .resize: "Resize"
         case .scroll, .arrows: "Scroll"
-        case .copy, .cut, .copyWord, .cutWord, .paste, .selectAll, .select, .deselect, .lineStart, .lineEnd: "Edit"
+        case .copy, .cut, .copyWord, .cutWord, .paste, .undo, .redo, .selectAll, .select, .deselect, .lineStart, .lineEnd: "Edit"
         case .pointer, .pointerStep, .hints: "Pointer"
         case .settings: "Other"
         }

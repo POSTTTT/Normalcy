@@ -49,6 +49,8 @@ After `cp`, `cu` or `pa`, a note at the bottom of the screen says **Copied**, **
 | `ls` | Start of Line | none | Puts the cursor at the start of its line (presses Cmd+←) |
 | `le` | End of Line | none | Puts the cursor at the end of its line (presses Cmd+→) |
 | `pa` | Paste | none | Pastes in the front app (presses Cmd+V) |
+| `u` | Undo | none | Undoes in the front app (presses Cmd+Z) |
+| `rd` | Redo | none | Redoes in the front app (presses Shift+Cmd+Z) |
 | `sa` | Select All | none | Selects everything in the front app (presses Cmd+A) |
 | `se` | Select | `h`, `l`, `j` / `k`, as you press them | Selects as each key is pressed, no Return needed: `h` the word before the cursor, `l` the word after, and each more `h` or `l` adds a word that way: `se lll` selects three words. `j` or `k` selects the whole line the cursor is in. **Return** or **Esc** closes the bar |
 

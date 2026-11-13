@@ -209,6 +209,8 @@ enum Command: Equatable {
             return .pressKeys(select + [KeyPress(key: key, flags: .maskCommand)] + unselect)
         case .paste: return .keys(HotKey(keyCode: UInt32(kVK_ANSI_V), modifiers: UInt32(cmdKey), label: "⌘ V"))
         case .selectAll: return .keys(HotKey(keyCode: UInt32(kVK_ANSI_A), modifiers: UInt32(cmdKey), label: "⌘ A"))
+        case .undo: return .keys(HotKey(keyCode: UInt32(kVK_ANSI_Z), modifiers: UInt32(cmdKey), label: "⌘ Z"))
+        case .redo: return .keys(HotKey(keyCode: UInt32(kVK_ANSI_Z), modifiers: UInt32(cmdKey | shiftKey), label: "⇧ ⌘ Z"))
         case .arrows, .select: return nil // arrow keys are pressed as keys are typed; Return only closes the bar
         case .tabs: return nil // tabs switch as keys are pressed; Return only closes the bar
         case .hints: return nil // the labels live in the bar; it clicks once one is typed

@@ -321,13 +321,14 @@ struct ResizeSteps {
 }
 
 enum Style: String, CaseIterable {
-    case bar, minimal, island
+    case bar, minimal, island, glow
 
     var note: String {
         switch self {
         case .bar: "Command bar shows a text field with the list under it."
         case .minimal: "Minimal hides the text field and shows what you type as key caps."
         case .island: "Dynamic Island shows what you type in a black pill that grows from the top of the screen, around the notch."
+        case .glow: "Glow lights the bottom edge of the screen and shows what you type as key caps above it."
         }
     }
 }
@@ -350,6 +351,9 @@ final class Store: ObservableObject {
     }
     @Published var keySymbols = UserDefaults.standard.object(forKey: "keySymbols") as? Bool ?? true { // ⌘ ↩, or Command Return
         didSet { UserDefaults.standard.set(keySymbols, forKey: "keySymbols") }
+    }
+    @Published var glowKeys = UserDefaults.standard.object(forKey: "glowKeys") as? Bool ?? true { // Glow style's key caps
+        didSet { UserDefaults.standard.set(glowKeys, forKey: "glowKeys") }
     }
     @Published var showSpaces = UserDefaults.standard.bool(forKey: "showSpaces") {
         didSet { UserDefaults.standard.set(showSpaces, forKey: "showSpaces") }
@@ -448,12 +452,18 @@ struct GeneralSettings: View {
                     Text("Command bar").tag(Style.bar)
                     Text("Minimal").tag(Style.minimal)
                     Text("Dynamic Island").tag(Style.island)
+                    Text("Glow").tag(Style.glow)
                 }
                 .pickerStyle(.segmented)
                 if store.style == .minimal {
                     Picker("Position on screen", selection: $store.position) {
                         ForEach(Position.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
                     }
+                }
+                if store.style == .glow {
+                    Toggle("Show what you type as key caps", isOn: $store.glowKeys)
+                }
+                if store.style == .minimal || store.style == .glow && store.glowKeys {
                     Toggle("Show each space as its own key", isOn: $store.showSpaces)
                 }
                 Toggle("Show the command list", isOn: $store.showList)

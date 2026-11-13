@@ -373,9 +373,10 @@ struct PaletteView: View {
     func motion(_ duration: Double) -> Animation? { reduceMotion ? nil : .uiEaseOut(duration) }
 
     var body: some View {
-        let minimal = store.style == .minimal, island = store.style == .island
-        // The command bar style and the island always sit at the top; minimal uses the chosen position.
-        let position = minimal ? store.position : .top
+        let minimal = store.style == .minimal, island = store.style == .island, glow = store.style == .glow
+        // The command bar style and the island always sit at the top; glow at the bottom, by its light;
+        // minimal uses the chosen position.
+        let position = minimal ? store.position : glow ? .bottom : .top
         let alignment: Alignment = switch position {
         case .top: .top
         case .center: .center
@@ -391,12 +392,12 @@ struct PaletteView: View {
                         // strip or list below widens the stack; only its own width animates.
                         .frame(maxWidth: .infinity)
                     content
-                } else if minimal {
+                } else if minimal || glow {
                     // Still receives the typing; only the letter squares below show it.
                     field.frame(width: 1, height: 1).opacity(0)
                     if position == .top { keys }
                     content
-                    if position != .top { keys }
+                    if position != .top, !glow || store.glowKeys { keys }
                 } else {
                     field
                         .padding(.horizontal, 24)
@@ -405,9 +406,13 @@ struct PaletteView: View {
                     content
                 }
             }
+            // Entrance: grows from the edge it's anchored to; Reduce Motion keeps only the fade.
+            // Placed inside the animation, so when the desktop strip or list resizes the stack, its
+            // position animates with its contents; outside, the stack moved at once while the key
+            // caps animated from their old spot, and jumped.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
             // Desktop thumbnails fade in when a desktop command is typed.
             .animation(motion(0.18) ?? .linear(duration: 0.1), value: model.desktopCommand?.id)
-            // Entrance: grows from the edge it's anchored to; Reduce Motion keeps only the fade.
             .opacity(model.visible ? 1 : 0)
             .scaleEffect(model.visible || reduceMotion ? 1 : 0.97, anchor: alignment.unitPoint)
             .padding(.horizontal, 20).padding(.bottom, 20) // room for the shadow
@@ -799,6 +804,53 @@ struct PaletteView: View {
 
 // Full-screen, click-through layer under the bar: a translucent box where the window will go,
 // like macOS's own tiling preview.
+// Glow style: colored light along the full bottom edge of the screen, in its own click-through
+// panel. The blooms drift up and down like a slow equalizer; each keystroke kicks them up and
+// they settle back, like a volume meter. Reduce Motion keeps a still glow.
+struct EdgeGlow: View {
+    @ObservedObject var model: Palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var kick = Date.distantPast
+
+    static let colors: [Color] = [.green, .cyan, .blue, .purple, .pink, .orange, .yellow]
+
+    var body: some View {
+        TimelineView(.animation(paused: reduceMotion || !model.visible)) { ctx in
+            let t = ctx.date.timeIntervalSinceReferenceDate
+            let pulse = reduceMotion ? 0 : exp(-max(0, ctx.date.timeIntervalSince(kick)) * 3)
+            let seed = kick.timeIntervalSinceReferenceDate // a different shape per keystroke
+            ZStack(alignment: .bottom) {
+                HStack(alignment: .bottom, spacing: 0) {
+                    ForEach(Self.colors.indices, id: \.self) { i in
+                        let d = Double(i)
+                        let idle = reduceMotion ? 1 : 1 + 0.3 * sin(t * 1.3 + d * 1.7)
+                        let h = 80 * idle + 170 * pulse * (0.6 + 0.4 * sin(seed * 7 + d * 2.3))
+                        // Centered on the edge so only the upper half shows.
+                        Ellipse().fill(Self.colors[i].opacity(0.5))
+                            .scaleEffect(x: 1.8)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: h)
+                            .offset(y: h / 2)
+                    }
+                }
+                .blur(radius: 24)
+                // The lit seam itself.
+                LinearGradient(colors: Self.colors, startPoint: .leading, endPoint: .trailing)
+                    .frame(height: 2)
+                    .opacity(0.7 + 0.3 * pulse)
+                    .blendMode(.plusLighter)
+            }
+            .opacity(model.text.isEmpty ? 0.6 + 0.4 * pulse : 0.85 + 0.15 * pulse)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .clipped()
+        .opacity(model.visible ? 1 : 0)
+        .offset(y: model.visible || reduceMotion ? 0 : 30)
+        .animation(reduceMotion ? nil : .uiEaseOut(0.3), value: model.visible)
+        .onChange(of: model.text) { kick = .now }
+    }
+}
+
 struct LayoutPreview: View {
     @ObservedObject var model: Palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

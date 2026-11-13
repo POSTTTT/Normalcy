@@ -257,6 +257,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                       styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
     let palette = Palette()
     let preview = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    let glowPanel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
     var hotKey: EventHotKeyRef?
     var subs = Set<AnyCancellable>()
     var target: NSRunningApplication?
@@ -361,10 +362,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let windows = all.mapValues { $0.filter { seen.contains($0.id) } }
         Task { @MainActor in
-            if let id = desks.currentID, let img = await Snapshot.capture(excluding: [panel, preview]) {
+            if let id = desks.currentID, let img = await Snapshot.capture(excluding: [panel, preview, glowPanel]) {
                 palette.thumbs[id] = img
                 // Wallpaper as it really renders; the file on disk isn't always readable.
-                if let bare = await Snapshot.capture(excluding: [panel, preview], bare: true) { palette.wallpaper = bare }
+                if let bare = await Snapshot.capture(excluding: [panel, preview, glowPanel], bare: true) { palette.wallpaper = bare }
                 thumbWindows[id] = Set(windows[id, default: []].map(\.id))
             }
             for id in desks.ids where id != desks.currentID {
@@ -500,6 +501,15 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         preview.animationBehavior = .none
         preview.level = .floating
         preview.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // Glow style's light: the full width of the screen, so it gets its own click-through panel.
+        glowPanel.contentView = NSHostingView(rootView: EdgeGlow(model: palette))
+        glowPanel.isOpaque = false
+        glowPanel.backgroundColor = .clear
+        glowPanel.hasShadow = false
+        glowPanel.ignoresMouseEvents = true
+        glowPanel.animationBehavior = .none
+        glowPanel.level = .statusBar
+        glowPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false // SwiftUI draws its own; the window shadow would outline the empty area
@@ -545,12 +555,16 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let screen = NSScreen.main {
             let v = screen.visibleFrame
             // Dynamic Island hangs from the very top, over the menu bar, so the column reaches it.
-            let island = Store.shared.style == .island
-            panel.level = island ? .statusBar : .floating
-            panel.setFrame(NSRect(x: v.midX - 300, y: v.minY, width: 600, height: island ? screen.frame.maxY - v.minY : v.height), display: false)
+            // Glow lights the very bottom edge, so its column reaches down over the Dock.
+            let island = Store.shared.style == .island, glow = Store.shared.style == .glow
+            panel.level = island || glow ? .statusBar : .floating
+            let bottom = glow ? screen.frame.minY : v.minY, top = island ? screen.frame.maxY : v.maxY
+            panel.setFrame(NSRect(x: v.midX - 300, y: bottom, width: 600, height: top - bottom), display: false)
             preview.setFrame(v, display: false) // same area window commands fill
+            glowPanel.setFrame(NSRect(x: screen.frame.minX, y: screen.frame.minY, width: screen.frame.width, height: 220), display: false)
         }
         panel.makeKeyAndOrderFront(nil)
+        if Store.shared.style == .glow { glowPanel.order(.below, relativeTo: panel.windowNumber) }
         DispatchQueue.main.async {
             // A pass later, so it has redrawn without the last command's box; below the bar.
             self.preview.order(.below, relativeTo: self.panel.windowNumber)
@@ -564,6 +578,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         steppedAside = false
         panel.orderOut(nil)
         preview.orderOut(nil)
+        glowPanel.orderOut(nil)
         // Drop the last command's preview box now, unanimated, so it never shows on the next open.
         var t = Transaction()
         t.disablesAnimations = true

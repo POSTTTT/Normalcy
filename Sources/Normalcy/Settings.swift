@@ -320,7 +320,17 @@ struct ResizeSteps {
     var edge: CGFloat = 0.05 // re: 5% of the screen per direction key
 }
 
-enum Style: String, CaseIterable { case bar, minimal }
+enum Style: String, CaseIterable {
+    case bar, minimal, island
+
+    var note: String {
+        switch self {
+        case .bar: "Command bar shows a text field with the list under it."
+        case .minimal: "Minimal hides the text field and shows what you type as key caps."
+        case .island: "Dynamic Island shows what you type in a black pill that grows from the top of the screen, around the notch."
+        }
+    }
+}
 // How the command list is laid out.
 enum ListStyle: String, CaseIterable { case grid, grouped }
 enum Position: String, CaseIterable { case top, center, bottom }
@@ -437,6 +447,7 @@ struct GeneralSettings: View {
                 Picker("Style", selection: $store.style) {
                     Text("Command bar").tag(Style.bar)
                     Text("Minimal").tag(Style.minimal)
+                    Text("Dynamic Island").tag(Style.island)
                 }
                 .pickerStyle(.segmented)
                 if store.style == .minimal {
@@ -455,9 +466,7 @@ struct GeneralSettings: View {
             } header: {
                 Text("Command Bar")
             } footer: {
-                Text(store.style == .bar
-                     ? "Command bar shows a text field with the list under it."
-                     : "Minimal hides the text field and shows what you type as key caps.")
+                Text(store.style.note)
                     .settingsFooter()
             }
             UpdateSection()

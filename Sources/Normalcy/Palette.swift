@@ -373,8 +373,8 @@ struct PaletteView: View {
     func motion(_ duration: Double) -> Animation? { reduceMotion ? nil : .uiEaseOut(duration) }
 
     var body: some View {
-        let minimal = store.style == .minimal
-        // The command bar style always sits near the top; the minimal style uses the chosen position.
+        let minimal = store.style == .minimal, island = store.style == .island
+        // The command bar style and the island always sit at the top; minimal uses the chosen position.
         let position = minimal ? store.position : .top
         let alignment: Alignment = switch position {
         case .top: .top
@@ -383,7 +383,15 @@ struct PaletteView: View {
         }
         GeometryReader { g in
             VStack(spacing: 10) {
-                if minimal {
+                if island {
+                    // The hidden field still receives the typing; behind the pill, so the stack's
+                    // spacing doesn't push the pill off the top edge.
+                    islandPill.background(field.frame(width: 1, height: 1).opacity(0))
+                        // Full width, so the pill stays centered under the notch when the desktop
+                        // strip or list below widens the stack; only its own width animates.
+                        .frame(maxWidth: .infinity)
+                    content
+                } else if minimal {
                     // Still receives the typing; only the letter squares below show it.
                     field.frame(width: 1, height: 1).opacity(0)
                     if position == .top { keys }
@@ -402,11 +410,14 @@ struct PaletteView: View {
             // Entrance: grows from the edge it's anchored to; Reduce Motion keeps only the fade.
             .opacity(model.visible ? 1 : 0)
             .scaleEffect(model.visible || reduceMotion ? 1 : 0.97, anchor: alignment.unitPoint)
-            .padding(20) // room for the shadow
-            .padding(.top, position == .top ? g.size.height * 0.15 : 0)
+            .padding(.horizontal, 20).padding(.bottom, 20) // room for the shadow
+            .padding(.top, island ? 0 : 20)
+            .padding(.top, position == .top && !island ? g.size.height * 0.15 : 0)
             .padding(.bottom, position == .bottom ? g.size.height * 0.08 : 0)
             .frame(width: g.size.width, height: g.size.height, alignment: alignment)
         }
+        // The island sits in the strip beside the notch, which SwiftUI otherwise keeps clear.
+        .ignoresSafeArea(edges: island ? .top : [])
         .onChange(of: model.focusToken) { focused = true }
     }
 
@@ -480,6 +491,36 @@ struct PaletteView: View {
             .animation(motion(0.18) ?? .linear(duration: 0.1), value: rows.map(\.id))
             .animation(motion(0.15), value: model.selected)
         }
+    }
+
+    // Dynamic Island style: a black pill flush with the top of the screen, as tall as the menu bar
+    // (or the notch) plus a line for what's typed, and at least as wide as the notch. It grows
+    // with the text on a spring, like the iPhone's; Reduce Motion drops the spring.
+    var islandPill: some View {
+        let screen = NSScreen.main
+        let top = screen.map { max($0.safeAreaInsets.top, $0.frame.maxY - $0.visibleFrame.maxY) } ?? 32
+        let notch = screen.flatMap { s in
+            s.auxiliaryTopLeftArea.flatMap { l in s.auxiliaryTopRightArea.map { r in s.frame.width - l.width - r.width } }
+        } ?? 180
+        let hint = model.argPlaceholder
+        return HStack(spacing: 8) {
+            if model.text.isEmpty {
+                Text("Type a command").foregroundStyle(.white.opacity(0.45))
+            } else {
+                Text(Palette.spacedArrows(model.text)).foregroundStyle(.white)
+                    .font(.system(size: 17, weight: .medium, design: .monospaced))
+            }
+            if let hint { Text("‹\(hint)›").foregroundStyle(.white.opacity(0.45)) }
+        }
+        .font(.system(size: 15))
+        .lineLimit(1)
+        .padding(.horizontal, 22)
+        .frame(minWidth: notch + 40, minHeight: 40)
+        .padding(.top, top)
+        .padding(.bottom, 6)
+        .background(.black, in: UnevenRoundedRectangle(bottomLeadingRadius: 24, bottomTrailingRadius: 24, style: .continuous))
+        .environment(\.colorScheme, .dark)
+        .animation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.25), value: model.text)
     }
 
     // Minimal style: one key-cap block per typed word, so "o Safari" shows [o] [Safari],

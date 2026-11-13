@@ -248,6 +248,8 @@ enum Command: Equatable {
 
 final class Panel: NSPanel {
     override var canBecomeKey: Bool { true }
+    // macOS keeps windows below the menu bar; the Dynamic Island has to reach the top edge.
+    override func constrainFrameRect(_ r: NSRect, to screen: NSScreen?) -> NSRect { r }
 }
 
 final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
@@ -540,8 +542,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         loadWallpaper()
         snapshotDesktop()
         // A screen-tall column; the view places its content inside by style and position.
-        if let v = NSScreen.main?.visibleFrame {
-            panel.setFrame(NSRect(x: v.midX - 300, y: v.minY, width: 600, height: v.height), display: false)
+        if let screen = NSScreen.main {
+            let v = screen.visibleFrame
+            // Dynamic Island hangs from the very top, over the menu bar, so the column reaches it.
+            let island = Store.shared.style == .island
+            panel.level = island ? .statusBar : .floating
+            panel.setFrame(NSRect(x: v.midX - 300, y: v.minY, width: 600, height: island ? screen.frame.maxY - v.minY : v.height), display: false)
             preview.setFrame(v, display: false) // same area window commands fill
         }
         panel.makeKeyAndOrderFront(nil)

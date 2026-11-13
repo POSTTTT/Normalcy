@@ -1484,6 +1484,11 @@ enum Main {
         precondition(Command.parse("cp k", d) == Command.parse("cp j", d) && Command.parse("cp x", d) == nil)
         precondition(Command.parse("sa", d) == .keys(HotKey(keyCode: UInt32(kVK_ANSI_A), modifiers: UInt32(cmdKey), label: "⌘ A")))
         precondition(Command.parse("ar", d) == nil && Command.parse("ar h", d) == nil)
+        // Shift+Return on a slip ("ar i") clears it for the next command instead of beeping.
+        sp.text = "ar i"
+        sp.enter(continuing: true)
+        precondition(sp.text == "")
+        sp.text = "se "
         // Return closes the bar without switching again; tn / tp still step one tab.
         var tabClosed = false, tabSubmitted: [String] = []
         sp.cancel = { tabClosed = true }
@@ -1537,7 +1542,7 @@ enum Main {
         }
         hp.text = "d 0"
         hp.enter(continuing: true)
-        precondition(ran == ["d 0"]) // a wrong argument still goes through, and beeps
+        precondition(ran == ["d 0"] && hp.text == "") // a wrong argument still goes through to beep, then clears
         let many = Palette.labeled((0..<30).map { CGRect(x: CGFloat($0), y: 0, width: 1, height: 1) })
         precondition(many.count == 30 && many[0].label == "aa" && many[9].label == "sa" && Set(many.map(\.label)).count == 30)
         precondition(Palette.labeled([]).isEmpty)

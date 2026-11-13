@@ -117,7 +117,7 @@ in that app.
 | Key | What it does |
 | --- | --- |
 | **Return** | Runs the command, or fills in the highlighted one's trigger when it needs input |
-| **Shift+Return** | Runs it and keeps the bar open. In `s`, `re` or `cl` with nothing left to run, it ends that command instead, leaving the bar empty: no need to reach for Esc |
+| **Shift+Return** | Runs it and keeps the bar open. In `s`, `re` or `cl` with nothing left to run, it ends that command instead, leaving the bar empty: no need to reach for Esc. After a slip it can't run, like `ar i` or `d 0`, it beeps and empties the bar too |
 | **Tab** / **Shift+Tab**, **Ctrl+N** / **Ctrl+P** | Move the highlight in the list |
 | **Esc** | Clears what's typed, then closes the bar |
 | **Ctrl+W** | Deletes the last word |

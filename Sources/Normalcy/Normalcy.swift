@@ -27,6 +27,12 @@ import SwiftUI
 //   cpw cuw <h|l>  copy / cut the whole word the cursor is in, before or after it
 //   cl <label>     click what that label sits on in the front window
 //   set            open settings
+extension Command {
+    var isLiveKeys: Bool {
+        switch self { case .arrow, .pressKeys: true; default: false }
+    }
+}
+
 struct KeyPress: Equatable {
     var key: CGKeyCode
     var flags: CGEventFlags
@@ -451,8 +457,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // Tab mode: the keys go straight to the app, which stays active behind the bar, so the
             // bar keeps focus and keeps taking keys. Activating the app would send the next key to it.
             if case .switchTab(let next) = cmd, let pid = target?.processIdentifier {
+                if target == .current { return switchSettingsTab(next) }
                 return pressKey(next ? 30 : 33, [.maskCommand, .maskShift], to: pid)
             }
+            // ar / se in front of our own Settings would send the keys to the bar itself, and each
+            // arrow would type another: the bar holds our keyboard, so there's nothing to do.
+            if target == .current, cmd.isLiveKeys { return NSSound.beep() }
             if case .arrow(let dir) = cmd, let pid = target?.processIdentifier {
                 return pressKey(Self.arrowKeyCode(dir), Self.arrowFlags, to: pid)
             }
@@ -692,6 +702,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
             }
         case .switchTab(let next):
+            if target == .current { return switchSettingsTab(next) }
             // Cmd+Shift+] / [: next / previous tab in Safari, Chrome, Firefox, Finder, Terminal and VS Code.
             pressInTarget(next ? 30 : 33, [.maskCommand, .maskShift]) // kVK_ANSI_RightBracket / LeftBracket
         case .arrow(let dir):
@@ -725,7 +736,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if continuing, panel.isVisible { steppedAside = true; panel.orderOut(nil) }
         let before = NSPasteboard.general.changeCount
         let edit = keys.first { $0.flags == .maskCommand && [7, 8, 9].contains($0.key) }?.key // kVK_ANSI_X, C, V
-        target?.activate()
+        activateTarget()
         // A gap between keys: browsers apply a selection in the page asynchronously, while Cmd+C
         // goes through the Edit menu at once, so without it the copy beats the selection.
         // shortcut: fixed 80 ms gaps; lengthen if a slow app still copies too early.
@@ -777,9 +788,15 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: hide)
     }
 
+    // Our own Settings doesn't take the keyboard back on its own once the bar is gone; hand it over.
+    func activateTarget() {
+        if target == .current, settingsWindow.isVisible { settingsWindow.makeKeyAndOrderFront(nil) }
+        target?.activate()
+    }
+
     // Same as .tabToWindow: give the app back key focus first, then press the keys.
     func pressInTarget(_ key: CGKeyCode, _ flags: CGEventFlags) {
-        target?.activate()
+        activateTarget()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { self.pressKey(key, flags) }
     }
 
@@ -1019,9 +1036,18 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let app = target else { return nil }
         var win: CFTypeRef?
         let ax = AXUIElementCreateApplication(app.processIdentifier)
-        guard AXUIElementCopyAttributeValue(ax, kAXFocusedWindowAttribute as CFString, &win) == .success,
+        // In front of our own Settings, the bar is the focused window; Settings is the main one.
+        let attr = app == .current ? kAXMainWindowAttribute : kAXFocusedWindowAttribute
+        guard AXUIElementCopyAttributeValue(ax, attr as CFString, &win) == .success,
               let win else { return nil }
         return (win as! AXUIElement)
+    }
+
+    // tn / tp / ts in our own Settings: its pages are toolbar tabs, which Cmd+Shift+] doesn't move.
+    func switchSettingsTab(_ next: Bool) {
+        guard let tabs = settingsWindow.contentViewController as? NSTabViewController else { return }
+        let n = tabs.tabViewItems.count
+        tabs.selectedTabViewItemIndex = (tabs.selectedTabViewItemIndex + (next ? 1 : -1) + n) % n
     }
 
     func place(_ f: CGRect, window: AXUIElement? = nil) {

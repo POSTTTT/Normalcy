@@ -493,9 +493,12 @@ struct PaletteView: View {
         }
     }
 
-    // Dynamic Island style: a black pill flush with the top of the screen, as tall as the menu bar
-    // (or the notch) plus a line for what's typed, and at least as wide as the notch. It grows
-    // with the text on a spring, like the iPhone's; Reduce Motion drops the spring.
+    // Dynamic Island style: a black island flush with the top of the screen, as tall as the menu
+    // bar (or the notch) plus a line for what's typed, and at least as wide as the notch.
+    // Depth without breaking the black: concave shoulders where it meets the bezel, a lit lower
+    // edge fading out toward the top, and a soft shadow so it floats over what's under it.
+    // It grows out of the notch on open and with the text as you type, on a light spring;
+    // Reduce Motion keeps only the fade.
     var islandPill: some View {
         let screen = NSScreen.main
         let top = screen.map { max($0.safeAreaInsets.top, $0.frame.maxY - $0.visibleFrame.maxY) } ?? 32
@@ -503,24 +506,54 @@ struct PaletteView: View {
             s.auxiliaryTopLeftArea.flatMap { l in s.auxiliaryTopRightArea.map { r in s.frame.width - l.width - r.width } }
         } ?? 180
         let hint = model.argPlaceholder
-        return HStack(spacing: 8) {
+        // The command being typed: its trigger once a space is in, else the highlighted match.
+        let head = model.text.split(separator: " ").first.flatMap { model.text.contains(" ") ? Command.lookup(String($0), in: model.defs()) : nil }
+            ?? (model.text.isEmpty || !model.matches.indices.contains(model.selected) ? nil : model.matches[model.selected])
+        let shape = IslandShape()
+        let spring: Animation? = reduceMotion ? nil : .spring(duration: 0.38, bounce: 0.15)
+        return HStack(spacing: 10) {
+            Image(systemName: head?.icon ?? "command")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white.opacity(head == nil ? 0.5 : 0.95))
+                .frame(width: 20)
+                .contentTransition(.symbolEffect(.replace))
             if model.text.isEmpty {
                 Text("Type a command").foregroundStyle(.white.opacity(0.45))
             } else {
-                Text(Palette.spacedArrows(model.text)).foregroundStyle(.white)
-                    .font(.system(size: 17, weight: .medium, design: .monospaced))
+                Text(Palette.spacedArrows(model.text))
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
             }
-            if let hint { Text("‹\(hint)›").foregroundStyle(.white.opacity(0.45)) }
+            // What it is, or what it wants next: muted, like a Live Activity's trailing detail.
+            // No spacer: the whole line stays centered under the notch.
+            if let detail = hint.map({ "‹\($0)›" }) ?? head?.title {
+                Text(detail)
+                    .padding(.leading, 4)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .transition(.opacity)
+            }
         }
-        .font(.system(size: 15))
+        .font(.system(size: 15, weight: .medium))
         .lineLimit(1)
-        .padding(.horizontal, 22)
-        .frame(minWidth: notch + 40, minHeight: 40)
+        .padding(.horizontal, 18 + IslandShape.shoulder)
+        .frame(minWidth: notch + 60, minHeight: 40)
+        .fixedSize()
         .padding(.top, top)
-        .padding(.bottom, 6)
-        .background(.black, in: UnevenRoundedRectangle(bottomLeadingRadius: 24, bottomTrailingRadius: 24, style: .continuous))
+        .padding(.bottom, 8)
+        .background {
+            shape.fill(.black)
+                .shadow(color: .black.opacity(0.45), radius: 18, y: 10)
+                // Light catching the lower edge; clear at the top, so it melts into the bezel.
+                .overlay(shape.stroke(LinearGradient(colors: [.clear, .white.opacity(0.14)],
+                                                     startPoint: .top, endPoint: .bottom), lineWidth: 1))
+        }
         .environment(\.colorScheme, .dark)
-        .animation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.25), value: model.text)
+        // Out of the notch: narrow and short at first, anchored to the top edge.
+        .scaleEffect(x: model.visible || reduceMotion ? 1 : 0.55, y: model.visible || reduceMotion ? 1 : 0.6, anchor: .top)
+        .animation(spring, value: model.visible)
+        .animation(spring, value: model.text)
+        .animation(spring, value: head?.id)
     }
 
     // Minimal style: one key-cap block per typed word, so "o Safari" shows [o] [Safari],
@@ -823,5 +856,24 @@ extension View {
         } else {
             background(.ultraThinMaterial, in: shape).shadow(color: .black.opacity(0.25), radius: 12, y: 4)
         }
+    }
+}
+
+// The island's outline: flush with the top edge, flaring out at the top into small concave
+// shoulders (as the notch meets the bezel), with round bottom corners.
+struct IslandShape: Shape {
+    static let shoulder: CGFloat = 10
+    var radius: CGFloat = 22
+
+    func path(in r: CGRect) -> Path {
+        let e = Self.shoulder
+        var p = Path()
+        p.move(to: CGPoint(x: r.minX, y: r.minY))
+        p.addArc(tangent1End: CGPoint(x: r.minX + e, y: r.minY), tangent2End: CGPoint(x: r.minX + e, y: r.minY + e), radius: e)
+        p.addArc(tangent1End: CGPoint(x: r.minX + e, y: r.maxY), tangent2End: CGPoint(x: r.maxX, y: r.maxY), radius: radius)
+        p.addArc(tangent1End: CGPoint(x: r.maxX - e, y: r.maxY), tangent2End: CGPoint(x: r.maxX - e, y: r.minY), radius: radius)
+        p.addArc(tangent1End: CGPoint(x: r.maxX - e, y: r.minY), tangent2End: CGPoint(x: r.maxX, y: r.minY), radius: e)
+        p.closeSubpath()
+        return p
     }
 }

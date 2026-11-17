@@ -472,13 +472,15 @@ struct GeneralSettings: View {
                     .settingsFooter()
             }
             Section {
-                Picker("Style", selection: $store.style) {
-                    Text("Command bar").tag(Style.bar)
-                    Text("Minimal").tag(Style.minimal)
-                    Text("Dynamic Island").tag(Style.island)
-                    Text("Glow").tag(Style.glow)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Style")
+                    ChoiceCards(selection: $store.style, choices: [
+                        (.bar, "Command bar", AnyView(StylePicture.bar)),
+                        (.minimal, "Minimal", AnyView(StylePicture.minimal)),
+                        (.island, "Dynamic Island", AnyView(StylePicture.island)),
+                        (.glow, "Glow", AnyView(StylePicture.glow)),
+                    ])
                 }
-                .pickerStyle(.segmented)
                 if store.style == .minimal {
                     Picker("Position on screen", selection: $store.position) {
                         ForEach(Position.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
@@ -489,11 +491,13 @@ struct GeneralSettings: View {
                 }
                 if store.style == .minimal || store.style == .glow && store.glowKeys {
                     Toggle("Show each space as its own key", isOn: $store.showSpaces)
-                    Picker("What a command takes", selection: $store.hintsVertical) {
-                        Text("Vertical").tag(true)
-                        Text("Horizontal").tag(false)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("What a command takes")
+                        ChoiceCards(selection: $store.hintsVertical, choices: [
+                            (true, "Vertical", AnyView(StylePicture.hint(vertical: true))),
+                            (false, "Horizontal", AnyView(StylePicture.hint(vertical: false))),
+                        ])
                     }
-                    .pickerStyle(.segmented)
                 }
                 Toggle("Show the command list", isOn: $store.showList)
                 if store.showList {
@@ -1009,5 +1013,108 @@ struct ShortcutRecorder: View {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         store.recordingHotKey = false
+    }
+}
+
+// Picks one of a few looks by a small picture of each, like Appearance in System Settings.
+struct ChoiceCards<Value: Hashable>: View {
+    @Binding var selection: Value
+    let choices: [(value: Value, title: String, picture: AnyView)]
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ForEach(choices.indices, id: \.self) { i in
+                let c = choices[i], on = c.value == selection
+                let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+                Button { selection = c.value } label: {
+                    VStack(spacing: 7) {
+                        c.picture
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 66)
+                            .background(shape.fill(Color.primary.opacity(0.06)))
+                            .clipShape(shape)
+                            .overlay(shape.strokeBorder(on ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: on ? 2.5 : 1))
+                        Text(c.title)
+                            .font(.system(size: 11, weight: on ? .semibold : .regular))
+                            .foregroundStyle(on ? .primary : .secondary)
+                            .lineLimit(1)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(c.title)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(.vertical, 2)
+        .animation(.easeOut(duration: 0.15), value: selection)
+    }
+}
+
+// Little drawings of each bar style, standing for a screen.
+enum StylePicture {
+    static let ink = Color.primary.opacity(0.55)
+    static let faint = Color.primary.opacity(0.18)
+
+    static func cap(_ w: CGFloat = 10) -> some View {
+        RoundedRectangle(cornerRadius: 2.5, style: .continuous).fill(faint).frame(width: w, height: 10)
+            .overlay(RoundedRectangle(cornerRadius: 2.5, style: .continuous).strokeBorder(Color.primary.opacity(0.25), lineWidth: 0.5))
+    }
+
+    static var bar: some View {
+        VStack(spacing: 3) {
+            RoundedRectangle(cornerRadius: 3).fill(ink).frame(width: 64, height: 8)
+            ForEach(0..<3, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 1.5).fill(faint).frame(width: 64 - CGFloat(i) * 12, height: 4)
+                    .frame(width: 64, alignment: .leading)
+            }
+        }
+        .padding(6)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.08)))
+    }
+
+    static var minimal: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: 3) { cap(); cap(18); cap() }.padding(.bottom, 9)
+        }
+    }
+
+    static var island: some View {
+        VStack {
+            UnevenRoundedRectangle(bottomLeadingRadius: 7, bottomTrailingRadius: 7)
+                .fill(.black).frame(width: 52, height: 13)
+                .overlay(Capsule().fill(.white.opacity(0.7)).frame(width: 22, height: 3))
+            Spacer()
+        }
+    }
+
+    static var glow: some View {
+        VStack(spacing: 5) {
+            Spacer()
+            HStack(spacing: 3) { cap(); cap(18) }
+            LinearGradient(colors: [.blue, .purple, .pink, .orange], startPoint: .leading, endPoint: .trailing)
+                .frame(height: 5).blur(radius: 3).opacity(0.9)
+        }
+    }
+
+    // The empty key cap after a command: options stacked, or in one line.
+    static func hint(vertical: Bool) -> some View {
+        HStack(alignment: .center, spacing: 4) {
+            cap()
+            Group {
+                if vertical {
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach([30, 22, 26], id: \.self) { w in RoundedRectangle(cornerRadius: 1).fill(ink).frame(width: CGFloat(w), height: 3) }
+                    }
+                } else {
+                    HStack(spacing: 3) {
+                        ForEach([14, 10, 12], id: \.self) { w in RoundedRectangle(cornerRadius: 1).fill(ink).frame(width: CGFloat(w), height: 3) }
+                    }
+                }
+            }
+            .padding(5)
+            .background(RoundedRectangle(cornerRadius: 3, style: .continuous).fill(faint))
+        }
     }
 }

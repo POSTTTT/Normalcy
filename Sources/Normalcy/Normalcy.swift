@@ -1549,6 +1549,7 @@ enum Main {
         sp.text = "o "
         precondition(!sp.scrollKey("j")) // only after the scroll command
         // Volume mode: "vol " and "vol <app> " step the volume as keys are pressed.
+        sp.volumeKeys = { "" } // the default, whatever this Mac's Settings say
         sp.text = "vol"
         precondition(sp.typeDirection("j") && sp.text == "vol " && scrolled.last == .volume(app: nil, .step(-1)))
         precondition(sp.typeDirection("k") && scrolled.last == .volume(app: nil, .step(1)))

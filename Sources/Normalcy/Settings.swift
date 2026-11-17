@@ -445,13 +445,28 @@ final class Store: ObservableObject {
         let saved = UserDefaults.standard.data(forKey: key)
             .flatMap { try? JSONDecoder().decode([CommandDef].self, from: $0) } ?? []
         // Merge so actions added in later versions show up with their defaults.
-        defs = CommandDef.defaults.map { d in saved.first { $0.id == d.id } ?? d }
+        defs = Self.repairDirections(CommandDef.defaults.map { d in saved.first { $0.id == d.id } ?? d })
+    }
+
+    // Direction keys must be four different visible characters. A stray space once got in (the key
+    // cap had focus as Settings opened), breaking the thirds and quarters built from it too:
+    // then those triggers go back to their defaults, keeping whether each is on.
+    static func repairDirections(_ defs: [CommandDef]) -> [CommandDef] {
+        let keys = Action.directions.map { a in defs.first { $0.id == a.rawValue }?.trigger ?? "" }
+        guard keys.contains(where: { $0.count != 1 || $0 == " " }) || Set(keys).count != 4 else { return defs }
+        let built = Action.directions + [.leftThird, .centerThird, .rightThird, .topLeft, .topRight, .bottomLeft, .bottomRight]
+        return defs.map { d in
+            guard let a = Action(rawValue: d.id), built.contains(a) else { return d }
+            var d = d
+            d.trigger = a.defaultTrigger
+            return d
+        }
     }
 
     // One direction key as a text field binding; keeps the last typed character.
     func directionKey(_ a: Action) -> Binding<String> {
         Binding(get: { self.defs.first { $0.id == a.rawValue }?.trigger ?? "" }, set: { v in
-            guard let k = v.last.map(String.init), let i = Action.directions.firstIndex(of: a) else { return }
+            guard let k = v.last.map(String.init), k != " ", let i = Action.directions.firstIndex(of: a) else { return }
             var keys = Action.directions.map { a in self.defs.first { $0.id == a.rawValue }?.trigger ?? "" }
             keys[i] = k
             self.defs = CommandDef.setDirections(keys, in: self.defs)
@@ -472,6 +487,13 @@ final class Store: ObservableObject {
 struct GeneralSettings: View {
     @ObservedObject var store = Store.shared
 
+    var directionKeys: String {
+        Action.directions.map { a in store.defs.first { $0.id == a.rawValue }?.trigger ?? "" }.joined()
+    }
+    var directionPreset: Binding<String> {
+        Binding(get: { directionKeys }, set: { p in store.defs = CommandDef.setDirections(Array(p).map(String.init), in: store.defs) })
+    }
+
     var body: some View {
         Form {
             Section {
@@ -484,6 +506,25 @@ struct GeneralSettings: View {
                 Text("Shortcut")
             } footer: {
                 Text("Click, then press new keys.")
+                    .settingsFooter()
+            }
+            // Used across commands (halves, thirds, quarters, d, m, re, s, vol…), so here, not in Windows.
+            Section {
+                Picker("Preset", selection: directionPreset) {
+                    ForEach(WindowSettings.presets, id: \.0) { Text($0.1).tag($0.0) }
+                    if !WindowSettings.presets.contains(where: { $0.0 == directionKeys }) { Text("Custom").tag(directionKeys) }
+                }
+                LabeledContent("Left, down, up, right") {
+                    HStack(spacing: 6) {
+                        ForEach(Action.directions, id: \.self) { a in
+                            KeyCapField(text: store.directionKey(a), label: a.title)
+                        }
+                    }
+                }
+            } header: {
+                Text("Direction Keys")
+            } footer: {
+                Text("Used by every command. Arrows always work.")
                     .settingsFooter()
             }
             Section {
@@ -657,32 +698,9 @@ struct WindowSettings: View {
     static let presets = [("hjkl", "H J K L"), ("aswd", "W A S D"), ("jkil", "I J K L")]
 
     var body: some View {
-        let currentKeys = Action.directions.map { a in store.defs.first { $0.id == a.rawValue }?.trigger ?? "" }.joined()
-        let presetBinding = Binding(get: { currentKeys }, set: { (p: String) in
-            store.defs = CommandDef.setDirections(Array(p).map(String.init), in: store.defs)
-        })
         CommandGroups(groups: ["Halves", "Thirds", "Quarters", "Fill & Center", "Resize"],
-                      note: "Thirds and quarters follow the direction keys.",
-                      options: ["Resize": GroupOptions(rows: AnyView(resizeOptions))]) {
-            Section {
-                Picker("Preset", selection: presetBinding) {
-                    ForEach(Self.presets, id: \.0) { Text($0.1).tag($0.0) }
-                    if !Self.presets.contains(where: { $0.0 == currentKeys }) { Text("Custom").tag(currentKeys) }
-                }
-                LabeledContent("Left, down, up, right") {
-                    HStack(spacing: 6) {
-                        ForEach(Action.directions, id: \.self) { a in
-                            KeyCapField(text: store.directionKey(a), label: a.title)
-                        }
-                    }
-                }
-            } header: {
-                Text("Direction Keys")
-            } footer: {
-                Text("Arrows always work.")
-                    .settingsFooter()
-            }
-        }
+                      note: "Thirds and quarters follow the direction keys (General).",
+                      options: ["Resize": GroupOptions(rows: AnyView(resizeOptions))])
     }
 
     @ViewBuilder var resizeOptions: some View {
@@ -1008,22 +1026,40 @@ struct KeyCap: View {
 }
 
 // An editable key cap: a trigger or a direction key.
+// A key cap that turns into a text field only once clicked. A field there from the start takes
+// focus as Settings opens, so a stray key replaced the key (and once left it drawn blank).
 struct KeyCapField: View {
     @Binding var text: String
     let label: String
     var invalid = false
+    @State private var editing = false
     @FocusState private var focused: Bool
 
     var body: some View {
-        TextField(label, text: $text)
-            .labelsHidden()
-            .textFieldStyle(.plain)
-            .font(.system(size: 13, weight: .medium, design: .monospaced))
-            .multilineTextAlignment(.center)
-            .focused($focused)
-            .frame(width: max(30, CGFloat(text.count) * 9 + 16), height: 24)
-            .keyCapBackground(highlight: focused ? .accentColor : invalid ? .red : nil)
-            .help(label)
+        Group {
+            if editing {
+                TextField(label, text: $text)
+                    .labelsHidden()
+                    .textFieldStyle(.plain)
+                    .focused($focused)
+                    .onAppear { DispatchQueue.main.async { focused = true } }
+                    .onChange(of: focused) { if !focused { editing = false } }
+                    .onSubmit { focused = false }
+            } else {
+                Button { editing = true } label: {
+                    Text(text).frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(label)
+                .accessibilityValue(text)
+                .accessibilityHint("Click, then type a new key")
+            }
+        }
+        .font(.system(size: 13, weight: .medium, design: .monospaced))
+        .multilineTextAlignment(.center)
+        .frame(width: max(30, CGFloat(text.count) * 9 + 16), height: 24)
+        .keyCapBackground(highlight: editing ? .accentColor : invalid ? .red : nil)
+        .help(label)
     }
 }
 

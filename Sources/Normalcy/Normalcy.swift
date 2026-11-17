@@ -1329,6 +1329,13 @@ enum Main {
         precondition(Command.parse("vol h", d) == nil) // left and right don't change it; "h" is an app name
         precondition(Command.parse("vol safari out air", d) == .volume(app: "safari", .output("air")))
         precondition(Command.parse("vol safari", d) == nil)
+        var broken = d
+        broken[broken.firstIndex { $0.id == "left" }!].trigger = " "
+        broken[broken.firstIndex { $0.id == "leftThird" }!].trigger = "  "
+        broken[broken.firstIndex { $0.id == "top" }!].enabled = false
+        let fixed = Store.repairDirections(broken)
+        precondition(fixed.first { $0.id == "left" }?.trigger == "h" && fixed.first { $0.id == "leftThird" }?.trigger == "h3")
+        precondition(fixed.first { $0.id == "top" }?.enabled == false && Store.repairDirections(d) == d)
         precondition(Command.parse("pp", d) == .media(.playPause) && Command.parse("nx", d) == .media(.next))
         precondition(Command.parse("ff", d) == .media(.skip(10)) && Command.parse("rw", d) == .media(.skip(-10)))
         precondition(Command.parse("ff 3", d) == nil)

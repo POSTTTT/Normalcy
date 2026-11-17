@@ -8,7 +8,7 @@ enum Action: String, CaseIterable {
     case scroll, arrows
     case copy, cut, copyWord, cutWord, paste, undo, redo, selectAll, select, deselect, lineStart, lineEnd
     case pointer, pointerStep, hints
-    case volume
+    case volume, playPause, nextTrack, prevTrack, skipForward, skipBack
     case settings
 
     // Left, down, up, right: the direction keys are these commands' triggers.
@@ -62,6 +62,11 @@ enum Action: String, CaseIterable {
         case .pointerStep: "ms"
         case .hints: "cl"
         case .volume: "vol"
+        case .playPause: "pp"
+        case .nextTrack: "nx"
+        case .prevTrack: "pv"
+        case .skipForward: "ff"
+        case .skipBack: "rw"
         case .settings: "set"
         }
     }
@@ -114,6 +119,11 @@ enum Action: String, CaseIterable {
         case .pointerStep: "Pointer by Steps"
         case .hints: "Click by Label"
         case .volume: "Volume"
+        case .playPause: "Play / Pause"
+        case .nextTrack: "Next Track"
+        case .prevTrack: "Previous Track"
+        case .skipForward: "Forward 10s"
+        case .skipBack: "Back 10s"
         case .settings: "Settings"
         }
     }
@@ -166,6 +176,11 @@ enum Action: String, CaseIterable {
         case .pointerStep: "cursorarrow.motionlines"
         case .hints: "cursorarrow.click"
         case .volume: "speaker.wave.2"
+        case .playPause: "playpause"
+        case .nextTrack: "forward.end"
+        case .prevTrack: "backward.end"
+        case .skipForward: "goforward.10"
+        case .skipBack: "gobackward.10"
         case .settings: "gearshape"
         }
     }
@@ -186,7 +201,7 @@ enum Action: String, CaseIterable {
         case .scroll, .arrows: "Scroll"
         case .copy, .cut, .copyWord, .cutWord, .paste, .undo, .redo, .selectAll, .select, .deselect, .lineStart, .lineEnd: "Edit"
         case .pointer, .pointerStep, .hints: "Pointer"
-        case .volume: "Sound"
+        case .volume, .playPause, .nextTrack, .prevTrack, .skipForward, .skipBack: "Sound"
         case .settings: "Other"
         }
     }

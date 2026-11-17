@@ -28,6 +28,8 @@ import SwiftUI
 //   cpw cuw <h|l>  copy / cut the whole word the cursor is in, before or after it
 //   cl <label>     click what that label sits on in the front window
 //   vol [app] <set 0-100|h j k l…|m|out [device]>   volume, mute, output device; for one app with its name
+//   pp nx pv       play / pause, next / previous track, in whatever is playing
+//   ff rw          10 seconds forward / back
 //   set            open settings
 extension Command {
     var isLiveKeys: Bool {
@@ -88,6 +90,7 @@ enum Command: Equatable {
     case keys(HotKey) // an app shortcut, pressed in the app in front
     case pressKeys([KeyPress]) // several keys in a row in the app in front, e.g. select a word then copy
     case volume(app: String?, VolumeChange) // nil: the whole Mac
+    case media(Media)
     case settings
 
     static let digitKeys: [CGKeyCode] = [18, 19, 20, 21, 23, 22, 26, 28, 25] // kVK_ANSI_1...9
@@ -228,6 +231,11 @@ enum Command: Equatable {
                 guard p.rest.isEmpty, let n = volumeSteps(p.verb, defs) else { return nil }
                 return .volume(app: p.app, .step(n))
             }
+        case .playPause: return arg.isEmpty ? .media(.playPause) : nil
+        case .nextTrack: return arg.isEmpty ? .media(.next) : nil
+        case .prevTrack: return arg.isEmpty ? .media(.previous) : nil
+        case .skipForward: return arg.isEmpty ? .media(.skip(10)) : nil
+        case .skipBack: return arg.isEmpty ? .media(.skip(-10)) : nil
         case .settings: return .settings
         }
     }
@@ -768,6 +776,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             pressInTarget(forward ? 30 : 33, .maskCommand)
         case .volume(let app, let change):
             runVolume(app: app, change)
+        case .media(let m):
+            Media.send(m)
         case .settings:
             openSettings()
         }
@@ -1288,6 +1298,9 @@ enum Main {
         precondition(Command.parse("vol h", d) == nil) // left and right don't change it; "h" is an app name
         precondition(Command.parse("vol safari out air", d) == .volume(app: "safari", .output("air")))
         precondition(Command.parse("vol safari", d) == nil)
+        precondition(Command.parse("pp", d) == .media(.playPause) && Command.parse("nx", d) == .media(.next))
+        precondition(Command.parse("ff", d) == .media(.skip(10)) && Command.parse("rw", d) == .media(.skip(-10)))
+        precondition(Command.parse("ff 3", d) == nil)
         // Every tap output channel gets the tap's left, right, left, … at the gain.
         var src: [Float32] = [1, 2, 3, 4], dst = [Float32](repeating: 9, count: 6)
         src.withUnsafeMutableBytes { sb in dst.withUnsafeMutableBytes { db in

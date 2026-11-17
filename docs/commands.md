@@ -62,6 +62,9 @@ While you type `vol`, the bar shows the current volume of the output device, or 
 | --- | --- | --- | --- |
 | `vol` | Volume | `set 0-100`, `j` `k`, `m`, or `out` | `vol set 50` sets the volume to 50%. After `vol `, `j` lowers it 5% and `k` raises it 5% as you press them (keys can be changed in Settings › Sound), no Return needed; Return or Esc closes the bar. `vol m` mutes or unmutes. `vol out` lists the output devices, with the one in use marked **Current**; pick one with Return, or type it: `vol out airpods` |
 | `vol <app>` | Volume for one app | an app name, then any of the above | The same, for one running app only. As you type its name, the running apps that start with it are listed; Return fills in the highlighted one; after `vol safari `, `j` `k` change Safari's volume as you press them. To name an app starting with j or k, type its first letter in capitals: `vol Kindle`. `vol safari set 30`, `vol spotify j`, `vol music m`, `vol chrome out airpods`. Names with spaces work: `vol google chrome set 30`. Needs macOS 14.2 and, the first time, System Audio Recording permission. The app must be playing sound; a browser tab that starts playing afterwards isn't included until you run it again. The app's own sound is replaced by Normalcy's until Normalcy quits |
+| `pp` | Play / Pause | none | Plays or pauses whatever is playing (Music, Spotify, a video in a browser), like the ⏯ key |
+| `nx` `pv` | Next / Previous Track | none | Next or previous track, like the ⏭ / ⏮ keys |
+| `ff` `rw` | Forward / Back 10s | none | Skips 10 seconds forward or back in whatever is playing |
 
 ## Window position
 

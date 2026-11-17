@@ -326,3 +326,40 @@ extension App {
         volumeNote(r.muted ? "\(name) muted" : "\(name) \(Volume.percent(r.gain))")
     }
 }
+
+// Whatever is playing: the Now Playing app (Music, Spotify, a video in a browser…).
+enum Media: Equatable {
+    case playPause, next, previous
+    case skip(Int) // seconds forward (negative: back)
+
+    static func send(_ m: Media) {
+        switch m {
+        case .playPause: key(16) // NX_KEYTYPE_PLAY
+        case .next: key(17) // NX_KEYTYPE_NEXT
+        case .previous: key(18) // NX_KEYTYPE_PREVIOUS
+        case .skip(let s): if !skip(s) { NSSound.beep() }
+        }
+    }
+
+    // A press of that media key on the keyboard.
+    static func key(_ code: Int) {
+        for down in [true, false] {
+            let state = down ? 0xa : 0xb
+            NSEvent.otherEvent(with: .systemDefined, location: .zero, modifierFlags: NSEvent.ModifierFlags(rawValue: UInt(state) << 8),
+                               timestamp: 0, windowNumber: 0, context: nil, subtype: 8,
+                               data1: code << 16 | state << 8, data2: -1)?.cgEvent?.post(tap: .cghidEventTap)
+        }
+    }
+
+    // There's no media key for a 10-second skip: MediaRemote's skip forward / backward commands
+    // (17 / 18), which players honor as their own skip, like a video page's seek buttons.
+    // shortcut: private framework; if a macOS update drops it, it beeps.
+    static func skip(_ seconds: Int) -> Bool {
+        typealias Send = @convention(c) (UInt32, CFDictionary?) -> Bool
+        guard let h = dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_LAZY),
+              let send = dlsym(h, "MRMediaRemoteSendCommand").map({ unsafeBitCast($0, to: Send.self) }),
+              let key = dlsym(h, "kMRMediaRemoteOptionSkipInterval")?.assumingMemoryBound(to: CFString.self).pointee
+        else { return false }
+        return send(seconds > 0 ? 17 : 18, [key: abs(seconds)] as CFDictionary)
+    }
+}

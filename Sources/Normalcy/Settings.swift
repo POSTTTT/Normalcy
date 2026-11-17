@@ -343,10 +343,10 @@ enum Style: String, CaseIterable {
 
     var note: String {
         switch self {
-        case .bar: "Command bar shows a text field with the list under it."
-        case .minimal: "Minimal hides the text field and shows what you type as key caps."
-        case .island: "Dynamic Island shows what you type in a black pill that grows from the top of the screen, around the notch."
-        case .glow: "Glow lights the bottom edge of the screen and shows what you type as key caps above it."
+        case .bar: "Text field with a list."
+        case .minimal: "Key caps only."
+        case .island: "A pill around the notch."
+        case .glow: "Light along the bottom edge."
         }
     }
 }
@@ -462,13 +462,13 @@ struct GeneralSettings: View {
             Section {
                 LabeledContent("Open the command bar") { ShortcutRecorder() }
                 if store.hotKeyTaken {
-                    Text("Another app already uses this shortcut. Pick a different one.")
+                    Text("Taken by another app.")
                         .font(.caption).foregroundStyle(.red)
                 }
             } header: {
                 Text("Shortcut")
             } footer: {
-                Text("Works from any app. Click the shortcut, then press the new one.")
+                Text("Click, then press new keys.")
                     .settingsFooter()
             }
             Section {
@@ -482,28 +482,28 @@ struct GeneralSettings: View {
                     ])
                 }
                 if store.style == .minimal {
-                    Picker("Position on screen", selection: $store.position) {
+                    Picker("Position", selection: $store.position) {
                         ForEach(Position.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
                     }
                 }
                 if store.style == .glow {
-                    Toggle("Show what you type as key caps", isOn: $store.glowKeys)
+                    Toggle("Key caps", isOn: $store.glowKeys)
                 }
                 if store.style == .minimal || store.style == .glow && store.glowKeys {
-                    Toggle("Show each space as its own key", isOn: $store.showSpaces)
+                    Toggle("Space as a key", isOn: $store.showSpaces)
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("What a command takes")
+                        Text("Options")
                         ChoiceCards(selection: $store.hintsVertical, choices: [
                             (true, "Vertical", AnyView(StylePicture.hint(vertical: true))),
                             (false, "Horizontal", AnyView(StylePicture.hint(vertical: false))),
                         ])
                     }
                 }
-                Toggle("Show the command list", isOn: $store.showList)
+                Toggle("Command list", isOn: $store.showList)
                 if store.showList {
-                    Picker("List layout", selection: $store.listStyle) {
-                        Text("Rows with a layout grid").tag(ListStyle.grid)
-                        Text("Grouped, scrolling").tag(ListStyle.grouped)
+                    Picker("Layout", selection: $store.listStyle) {
+                        Text("Grid").tag(ListStyle.grid)
+                        Text("Grouped").tag(ListStyle.grouped)
                     }
                 }
             } header: {
@@ -535,7 +535,7 @@ struct UpdateSection: View {
                         .disabled(current == nil || updater.status == .checking || updater.status == .installing)
                 }
             }
-            Toggle("Check for updates automatically", isOn: $updater.auto).disabled(current == nil)
+            Toggle("Auto-update", isOn: $updater.auto).disabled(current == nil)
         } header: {
             Text("Updates")
         } footer: {
@@ -595,16 +595,16 @@ struct CommandSettings: View {
 
     var body: some View {
         CommandGroups(groups: ["Apps", "Desktops & Tabs", "Edit", "Scroll", "Pointer", "Sound", "Other"],
-                      note: "The key cap is what you type. Click it to change it; switch a command off to hide it.") {
+                      note: "Click a key cap to change it.") {
             EmptyView()
         } after: {
             Section {
                 Stepper(value: $store.pointerStep, in: 10...400, step: 10) {
-                    LabeledContent("Each direction key after ms", value: "\(store.pointerStep) points")
+                    LabeledContent("ms step", value: "\(store.pointerStep) points")
                 }
-                Toggle("Show the area left after mo", isOn: $store.pointerPreview)
+                Toggle("Show mo area", isOn: $store.pointerPreview)
                 Picker("Direction keys", selection: $store.pointerKeys) {
-                    Text("Same as windows").tag("")
+                    Text("Windows").tag("")
                     ForEach(WindowSettings.presets, id: \.0) { Text($0.1).tag($0.0) }
                     if !store.pointerKeys.isEmpty, !WindowSettings.presets.contains(where: { $0.0 == store.pointerKeys }) {
                         Text("Custom").tag(store.pointerKeys)
@@ -620,13 +620,13 @@ struct CommandSettings: View {
             } header: {
                 Text("Pointer")
             } footer: {
-                Text("Uppercase keys always move 10 points, for the last bit. r and 2 are kept for clicks.")
+                Text("Uppercase: 10 points.")
                     .settingsFooter()
             }
             Section {
-                Picker("Volume keys", selection: $store.volumeKeys) {
-                    Text("Same as windows' down and up").tag("")
-                    Text("All four direction keys").tag("all")
+                Picker("Keys", selection: $store.volumeKeys) {
+                    Text("Down, up").tag("")
+                    Text("All four").tag("all")
                     if !["", "all"].contains(store.volumeKeys) { Text("Custom").tag(store.volumeKeys) }
                 }
                 LabeledContent("Quieter, louder") {
@@ -638,7 +638,7 @@ struct CommandSettings: View {
             } header: {
                 Text("Sound")
             } footer: {
-                Text("After vol, each press changes the volume 5%. Other keys type an app name. ↓ and ↑ always work. With all four direction keys, left and down lower it, up and right raise it.")
+                Text("5% per press.")
                     .settingsFooter()
             }
         }
@@ -656,7 +656,7 @@ struct WindowSettings: View {
             store.defs = CommandDef.setDirections(Array(p).map(String.init), in: store.defs)
         })
         CommandGroups(groups: ["Halves", "Thirds", "Quarters", "Fill & Center", "Resize"],
-                      note: "Thirds and quarters are built from the direction keys, so changing those renames them too.") {
+                      note: "Thirds and quarters follow the direction keys.") {
             Section {
                 Picker("Preset", selection: presetBinding) {
                     ForEach(Self.presets, id: \.0) { Text($0.1).tag($0.0) }
@@ -672,23 +672,20 @@ struct WindowSettings: View {
             } header: {
                 Text("Direction Keys")
             } footer: {
-                Text("Used for halves, thirds and quarters, and after d, m, t, re and s. Arrow keys always work too.")
+                Text("Arrows always work.")
                     .settingsFooter()
             }
         } after: {
             Section {
                 Stepper(value: $store.growPercent, in: 1...50) {
-                    LabeledContent("Bigger or smaller (+ −)", value: "\(store.growPercent)%")
+                    LabeledContent("+ −", value: "\(store.growPercent)%")
                 }
                 Stepper(value: $store.edgePercent, in: 1...25) {
-                    LabeledContent("Each direction key after re", value: "\(store.edgePercent)% of screen")
+                    LabeledContent("re step", value: "\(store.edgePercent)% of screen")
                 }
-                Toggle("Resize the window next to it too", isOn: $store.resizeNeighbors)
+                Toggle("Resize neighbor", isOn: $store.resizeNeighbors)
             } header: {
                 Text("Resize Steps")
-            } footer: {
-                Text("With two windows side by side, growing one shrinks the other.")
-                    .settingsFooter()
             }
         }
     }
@@ -712,13 +709,10 @@ struct KeySettings: View {
     var body: some View {
         Form {
             Section {
-                Picker("Show special keys as", selection: $store.keySymbols) {
-                    Text("Symbols  ⌘ ⌥ ↩").tag(true)
-                    Text("Text  Command Option Return").tag(false)
+                Picker("Special keys", selection: $store.keySymbols) {
+                    Text("⌘ ⌥ ↩").tag(true)
+                    Text("Command Option Return").tag(false)
                 }
-            } footer: {
-                Text("Used for Return, Tab, Esc, Delete and the modifier keys, here and in recorded shortcuts.")
-                    .settingsFooter()
             }
             Section {
                 ForEach(barKeys, id: \.1) { combos, what in
@@ -734,7 +728,7 @@ struct KeySettings: View {
             } header: {
                 Text("In the Command Bar")
             } footer: {
-                Text("These keys are fixed. Command triggers are set in Commands and Windows.")
+                Text("Fixed.")
                     .settingsFooter()
             }
         }
@@ -848,7 +842,7 @@ struct AppShortcutSettings: View {
             }
             Section {} footer: {
                 HStack(alignment: .top) {
-                    Text("Each shortcut gets a trigger, and shows in the bar only while its app is in front. If it matches a built-in trigger, the app's wins there.")
+                    Text("Shows only while its app is in front.")
                         .settingsFooter()
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button("Add App…", action: addApp)

@@ -726,7 +726,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .moveToDesktop(let key):
             moveWindow(toDesktop: key)
         case .layout(let f):
-            place(f)
+            if !macTile(f) { place(f) }
         case .resize, .resizeEdge:
             resizeFocused(cmd)
         case .scroll(let steps):
@@ -1016,6 +1016,37 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     // Apps with native macOS tabs (Ghostty, Safari, Finder, Terminal...) list this under the Window menu.
     // Pressing it through Accessibility works no matter which menu or shortcut the app uses.
+    // Layouts macOS tiles itself, by their Window menu items. A window macOS tiled remembers that
+    // tile and goes back to it after Mission Control, whatever size it was set to since; tiling
+    // through macOS keeps what it remembers in step. Thirds and Center have no tile: placed directly.
+    // shortcut: English menu titles only; other languages fall back to placing directly.
+    static let macTiles: [(CGRect, [String])] = [
+        (Action.full, ["Window", "Fill"]),
+        (.left, ["Window", "Move & Resize", "Left"]), (.right, ["Window", "Move & Resize", "Right"]),
+        (.top, ["Window", "Move & Resize", "Top"]), (.bottom, ["Window", "Move & Resize", "Bottom"]),
+        (.topLeft, ["Window", "Move & Resize", "Top Left"]), (.topRight, ["Window", "Move & Resize", "Top Right"]),
+        (.bottomLeft, ["Window", "Move & Resize", "Bottom Left"]), (.bottomRight, ["Window", "Move & Resize", "Bottom Right"]),
+    ].map { (Command.layoutRect($0.0)!, $0.1) }
+
+    func macTile(_ f: CGRect) -> Bool {
+        Self.macTiles.first { $0.0 == f }.map { pressMenuPath($0.1) } ?? false
+    }
+
+    // Presses the menu item at that path (menu, submenu…, item), if it's there and enabled.
+    func pressMenuPath(_ path: [String]) -> Bool {
+        guard let pid = target?.processIdentifier,
+              var e: AXUIElement = axAttr(AXUIElementCreateApplication(pid), kAXMenuBarAttribute) else { return false }
+        for title in path {
+            // An item's one child is its menu, whose children are the items.
+            let kids: [AXUIElement] = axAttr(e, kAXChildrenAttribute) ?? []
+            let items = kids.flatMap { k in (axAttr(k, kAXRoleAttribute) as String?) == kAXMenuRole ? (axAttr(k, kAXChildrenAttribute) ?? []) : [k] }
+            guard let next = items.first(where: { (axAttr($0, kAXTitleAttribute) as String?) == title }) else { return false }
+            e = next
+        }
+        guard (axAttr(e, kAXEnabledAttribute) as Bool?) == true else { return false }
+        return AXUIElementPerformAction(e, kAXPressAction as CFString) == .success
+    }
+
     func pressMenuItem(_ title: String) -> Bool {
         guard let pid = target?.processIdentifier else { return false }
         // Menu bar > menu bar item > menu > menu item: 3 levels down.

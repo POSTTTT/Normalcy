@@ -1189,7 +1189,6 @@ enum StylePicture {
     static var glow: some View {
         VStack(spacing: 5) {
             Spacer()
-            HStack(spacing: 3) { cap(); cap(18) }
             LinearGradient(colors: [.blue, .purple, .pink, .orange], startPoint: .leading, endPoint: .trailing)
                 .frame(height: 5).blur(radius: 3).opacity(0.9)
         }

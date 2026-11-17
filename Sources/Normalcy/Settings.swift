@@ -633,7 +633,7 @@ struct CommandSettings: View {
                     }
                 }
             } header: {
-                Text("Pointer")
+                Text("Pointer").groupTitle()
             } footer: {
                 Text("Uppercase: 10 points.")
                     .settingsFooter()
@@ -651,7 +651,7 @@ struct CommandSettings: View {
                     }
                 }
             } header: {
-                Text("Sound")
+                Text("Sound").groupTitle()
             } footer: {
                 Text("5% per press.")
                     .settingsFooter()
@@ -700,7 +700,7 @@ struct WindowSettings: View {
                 }
                 Toggle("Resize neighbor", isOn: $store.resizeNeighbors)
             } header: {
-                Text("Resize Steps")
+                Text("Resize Steps").groupTitle()
             }
         }
     }
@@ -768,17 +768,58 @@ struct CommandGroups<Before: View, After: View>: View {
         self.after = after()
     }
 
+    // Groups folded away, kept between launches.
+    @AppStorage("hiddenGroups") private var hiddenList = ""
+    var hidden: Set<String> { Set(hiddenList.split(separator: "|").map(String.init)) }
+
+    // Click to show or hide the group's commands. Folded, it shows how many there are, and a
+    // warning if one of them has a trigger problem.
+    func groupHeader(_ g: String, count: Int, open: Bool, problem: Bool) -> some View {
+        Button {
+            var h = hidden
+            if open { h.insert(g) } else { h.remove(g) }
+            withAnimation(.easeOut(duration: 0.2)) { hiddenList = h.sorted().joined(separator: "|") }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+                    .rotationEffect(.degrees(open ? 90 : 0))
+                    .foregroundStyle(.secondary)
+                Text(g).font(.system(size: 13, weight: .bold)).foregroundStyle(.primary)
+                if !open {
+                    Text("\(count)").font(.system(size: 13)).foregroundStyle(.secondary)
+                    if problem { Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange) }
+                }
+                Spacer()
+            }
+            // Fixed size and spacing: a Form shrinks the headers of sections left empty, as folded ones are.
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(g)
+        .accessibilityValue(open ? "shown" : "hidden, \(count) commands")
+        .accessibilityHint(open ? "Hides its commands" : "Shows its commands")
+    }
+
     var body: some View {
         Form {
             before
             ForEach(groups, id: \.self) { g in
-                Section(g) {
-                    ForEach(store.defs.indices.filter { Action(rawValue: store.defs[$0].id)?.group == g }, id: \.self) { i in
-                        let a = Action(rawValue: store.defs[i].id)!
-                        CommandRow(def: $store.defs[i],
-                                   trigger: Action.directions.contains(a) ? store.directionKey(a) : $store.defs[i].trigger,
-                                   problem: store.problem(store.defs[i]))
+                let rows = store.defs.indices.filter { Action(rawValue: store.defs[$0].id)?.group == g }
+                let open = !hidden.contains(g)
+                Section {
+                    if open {
+                        ForEach(rows, id: \.self) { i in
+                            let a = Action(rawValue: store.defs[i].id)!
+                            CommandRow(def: $store.defs[i],
+                                       trigger: Action.directions.contains(a) ? store.directionKey(a) : $store.defs[i].trigger,
+                                       problem: store.problem(store.defs[i]))
+                        }
                     }
+                } header: {
+                    groupHeader(g, count: rows.count, open: open,
+                                problem: !open && rows.contains { store.problem(store.defs[$0]) != nil })
                 }
             }
             after
@@ -1125,5 +1166,12 @@ enum StylePicture {
             .padding(5)
             .background(RoundedRectangle(cornerRadius: 3, style: .continuous).fill(faint))
         }
+    }
+}
+
+extension View {
+    // A section title that keeps its size and room after folded (empty) sections.
+    func groupTitle() -> some View {
+        font(.system(size: 13, weight: .bold)).foregroundStyle(.primary).padding(.top, 8)
     }
 }

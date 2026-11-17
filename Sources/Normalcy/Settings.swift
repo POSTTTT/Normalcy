@@ -610,51 +610,42 @@ struct CommandSettings: View {
 
     var body: some View {
         CommandGroups(groups: ["Apps", "Desktops & Tabs", "Edit", "Scroll", "Pointer", "Sound", "Other"],
-                      note: "Click a key cap to change it.") {
-            EmptyView()
-        } after: {
-            Section {
-                Stepper(value: $store.pointerStep, in: 10...400, step: 10) {
-                    LabeledContent("ms step", value: "\(store.pointerStep) points")
-                }
-                Toggle("Show mo area", isOn: $store.pointerPreview)
-                Picker("Direction keys", selection: $store.pointerKeys) {
-                    Text("Windows").tag("")
-                    ForEach(WindowSettings.presets, id: \.0) { Text($0.1).tag($0.0) }
-                    if !store.pointerKeys.isEmpty, !WindowSettings.presets.contains(where: { $0.0 == store.pointerKeys }) {
-                        Text("Custom").tag(store.pointerKeys)
-                    }
-                }
-                LabeledContent("Left, down, up, right") {
-                    HStack(spacing: 6) {
-                        ForEach(0..<4, id: \.self) { i in
-                            KeyCapField(text: pointerKey(i), label: Action.directions[i].title)
-                        }
-                    }
-                }
-            } header: {
-                Text("Pointer").groupTitle()
-            } footer: {
-                Text("Uppercase: 10 points.")
-                    .settingsFooter()
+                      note: "Click a key cap to change it.",
+                      options: ["Pointer": GroupOptions(rows: AnyView(pointerOptions), note: "Uppercase: 10 points."),
+                                "Sound": GroupOptions(rows: AnyView(soundOptions), note: "5% per press.")])
+    }
+
+    @ViewBuilder var pointerOptions: some View {
+        Stepper(value: $store.pointerStep, in: 10...400, step: 10) {
+            LabeledContent("ms step", value: "\(store.pointerStep) points")
+        }
+        Toggle("Show mo area", isOn: $store.pointerPreview)
+        Picker("Direction keys", selection: $store.pointerKeys) {
+            Text("Windows").tag("")
+            ForEach(WindowSettings.presets, id: \.0) { Text($0.1).tag($0.0) }
+            if !store.pointerKeys.isEmpty, !WindowSettings.presets.contains(where: { $0.0 == store.pointerKeys }) {
+                Text("Custom").tag(store.pointerKeys)
             }
-            Section {
-                Picker("Keys", selection: $store.volumeKeys) {
-                    Text("Down, up").tag("")
-                    Text("All four").tag("all")
-                    if !["", "all"].contains(store.volumeKeys) { Text("Custom").tag(store.volumeKeys) }
+        }
+        LabeledContent("Left, down, up, right") {
+            HStack(spacing: 6) {
+                ForEach(0..<4, id: \.self) { i in
+                    KeyCapField(text: pointerKey(i), label: Action.directions[i].title)
                 }
-                LabeledContent("Quieter, louder") {
-                    HStack(spacing: 6) {
-                        KeyCapField(text: volumeKey(0), label: "Quieter")
-                        KeyCapField(text: volumeKey(1), label: "Louder")
-                    }
-                }
-            } header: {
-                Text("Sound").groupTitle()
-            } footer: {
-                Text("5% per press.")
-                    .settingsFooter()
+            }
+        }
+    }
+
+    @ViewBuilder var soundOptions: some View {
+        Picker("Keys", selection: $store.volumeKeys) {
+            Text("Down, up").tag("")
+            Text("All four").tag("all")
+            if !["", "all"].contains(store.volumeKeys) { Text("Custom").tag(store.volumeKeys) }
+        }
+        LabeledContent("Quieter, louder") {
+            HStack(spacing: 6) {
+                KeyCapField(text: volumeKey(0), label: "Quieter")
+                KeyCapField(text: volumeKey(1), label: "Louder")
             }
         }
     }
@@ -671,7 +662,8 @@ struct WindowSettings: View {
             store.defs = CommandDef.setDirections(Array(p).map(String.init), in: store.defs)
         })
         CommandGroups(groups: ["Halves", "Thirds", "Quarters", "Fill & Center", "Resize"],
-                      note: "Thirds and quarters follow the direction keys.") {
+                      note: "Thirds and quarters follow the direction keys.",
+                      options: ["Resize": GroupOptions(rows: AnyView(resizeOptions))]) {
             Section {
                 Picker("Preset", selection: presetBinding) {
                     ForEach(Self.presets, id: \.0) { Text($0.1).tag($0.0) }
@@ -690,19 +682,17 @@ struct WindowSettings: View {
                 Text("Arrows always work.")
                     .settingsFooter()
             }
-        } after: {
-            Section {
-                Stepper(value: $store.growPercent, in: 1...50) {
-                    LabeledContent("+ −", value: "\(store.growPercent)%")
-                }
-                Stepper(value: $store.edgePercent, in: 1...25) {
-                    LabeledContent("re step", value: "\(store.edgePercent)% of screen")
-                }
-                Toggle("Resize neighbor", isOn: $store.resizeNeighbors)
-            } header: {
-                Text("Resize Steps").groupTitle()
-            }
         }
+    }
+
+    @ViewBuilder var resizeOptions: some View {
+        Stepper(value: $store.growPercent, in: 1...50) {
+            LabeledContent("+ −", value: "\(store.growPercent)%")
+        }
+        Stepper(value: $store.edgePercent, in: 1...25) {
+            LabeledContent("re step", value: "\(store.edgePercent)% of screen")
+        }
+        Toggle("Resize neighbor", isOn: $store.resizeNeighbors)
     }
 }
 
@@ -753,17 +743,25 @@ struct KeySettings: View {
 
 // A page of command groups, with optional sections before and after, and a reset for just
 // these commands.
+// Settings that belong to one group of commands, shown under its rows.
+struct GroupOptions {
+    let rows: AnyView
+    var note: String?
+}
+
 struct CommandGroups<Before: View, After: View>: View {
     @ObservedObject var store = Store.shared
     let groups: [String]
     let note: String
+    let options: [String: GroupOptions]
     @ViewBuilder var before: Before
     @ViewBuilder var after: After
 
-    init(groups: [String], note: String,
+    init(groups: [String], note: String, options: [String: GroupOptions] = [:],
          @ViewBuilder before: () -> Before = { EmptyView() }, @ViewBuilder after: () -> After = { EmptyView() }) {
         self.groups = groups
         self.note = note
+        self.options = options
         self.before = before()
         self.after = after()
     }
@@ -820,6 +818,19 @@ struct CommandGroups<Before: View, After: View>: View {
                 } header: {
                     groupHeader(g, count: rows.count, open: open,
                                 problem: !open && rows.contains { store.problem(store.defs[$0]) != nil })
+                }
+                // The group's own settings, right under its commands and folded with them.
+                if open, let o = options[g] {
+                    Section {
+                        o.rows
+                    } header: {
+                        Label("\(g) settings", systemImage: "slider.horizontal.3")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 14)
+                    } footer: {
+                        if let note = o.note { Text(note).settingsFooter() }
+                    }
                 }
             }
             after
@@ -1166,12 +1177,5 @@ enum StylePicture {
             .padding(5)
             .background(RoundedRectangle(cornerRadius: 3, style: .continuous).fill(faint))
         }
-    }
-}
-
-extension View {
-    // A section title that keeps its size and room after folded (empty) sections.
-    func groupTitle() -> some View {
-        font(.system(size: 13, weight: .bold)).foregroundStyle(.primary).padding(.top, 8)
     }
 }

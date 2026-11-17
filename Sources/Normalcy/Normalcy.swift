@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Combine
+import CoreAudio
 import SwiftUI
 
 // Commands (default triggers, editable in Settings):
@@ -26,6 +27,7 @@ import SwiftUI
 //   ds [h]         deselect, leaving the cursor at the selection's end (or start)
 //   cpw cuw <h|l>  copy / cut the whole word the cursor is in, before or after it
 //   cl <label>     click what that label sits on in the front window
+//   vol [app] <set 0-100|h j k l…|m|out [device]>   volume, mute, output device; for one app with its name
 //   set            open settings
 extension Command {
     var isLiveKeys: Bool {
@@ -85,6 +87,7 @@ enum Command: Equatable {
     case clickAt(CGPoint, right: Bool, count: Int) // global coordinates, top-left origin
     case keys(HotKey) // an app shortcut, pressed in the app in front
     case pressKeys([KeyPress]) // several keys in a row in the app in front, e.g. select a word then copy
+    case volume(app: String?, VolumeChange) // nil: the whole Mac
     case settings
 
     static let digitKeys: [CGKeyCode] = [18, 19, 20, 21, 23, 22, 26, 28, 25] // kVK_ANSI_1...9
@@ -214,12 +217,38 @@ enum Command: Equatable {
         case .arrows, .select: return nil // arrow keys are pressed as keys are typed; Return only closes the bar
         case .tabs: return nil // tabs switch as keys are pressed; Return only closes the bar
         case .hints: return nil // the labels live in the bar; it clicks once one is typed
+        case .volume:
+            guard let p = volumeParts(arg, defs) else { return nil }
+            switch p.verb {
+            case "set": return Int(p.rest).flatMap { (0...100).contains($0) ? .volume(app: p.app, .set($0)) : nil }
+            case "m": return p.rest.isEmpty ? .volume(app: p.app, .mute) : nil
+            case "out": return p.rest.isEmpty ? nil : .volume(app: p.app, .output(p.rest))
+            default:
+                // Up raises it, down lowers it, one step per key: "vol kk".
+                guard p.rest.isEmpty, let n = volumeSteps(p.verb, defs) else { return nil }
+                return .volume(app: p.app, .step(n))
+            }
         case .settings: return .settings
         }
     }
 
+    // "vol [app] verb [rest]": the app name is every word before the first verb (set, m, out, or
+    // direction keys), so names with spaces work: "vol google chrome set 30".
+    static func volumeParts(_ arg: String, _ defs: [CommandDef]) -> (app: String?, verb: String, rest: String)? {
+        let words = arg.split(separator: " ").map(String.init)
+        guard let i = words.firstIndex(where: { ["set", "m", "out"].contains($0) || volumeSteps($0, defs) != nil }) else { return nil }
+        return (i == 0 ? nil : words[..<i].joined(separator: " "), words[i], words[(i + 1)...].joined(separator: " "))
+    }
+
     // Each direction key is one step, summed: "ll" = two right, "lj" = one right and one down.
     // nil if empty or anything but a direction is typed.
+    // Down and up keys only (j k, or ↓ ↑): -1 per down, +1 per up. nil if anything else is typed.
+    static func volumeSteps(_ arg: String, _ defs: [CommandDef]) -> Int? {
+        guard let s = directionSteps(arg, defs), s.width == 0,
+              arg.allSatisfy({ [.top, .bottom].contains(direction(String($0), in: defs)) }) else { return nil }
+        return Int(-s.height)
+    }
+
     static func directionSteps(_ arg: String, _ defs: [CommandDef]) -> CGSize? {
         let steps: [Action: CGSize] = [.right: CGSize(width: 1, height: 0), .left: CGSize(width: -1, height: 0),
                                        .bottom: CGSize(width: 0, height: 1), .top: CGSize(width: 0, height: -1)]
@@ -548,6 +577,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         captureWindow()
         palette.apps = runningApps()
+        palette.outputs = Self.outputItems()
         palette.installed = Self.installedApps()
         palette.text = ""
         palette.desktops = Desktops.read()
@@ -665,6 +695,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         target = NSWorkspace.shared.frontmostApplication
         captureWindow()
         palette.apps = runningApps()
+        palette.outputs = Self.outputItems()
         palette.desktops = Desktops.read()
         snapshotDesktop() // the command may have changed this desktop
         panel.makeKeyAndOrderFront(nil)
@@ -676,10 +707,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .open(let name):
             _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/open"), arguments: ["-a", name])
         case .focus(let q):
-            // An exact name wins, so picking "Safari" from the list never lands on "Safari Technology Preview".
-            let apps = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
-            let name = { (a: NSRunningApplication) in (a.localizedName ?? "").lowercased() }
-            (apps.first { name($0) == q.lowercased() } ?? apps.first { name($0).hasPrefix(q.lowercased()) })?.activate()
+            Self.runningApp(q)?.activate()
         case .focusWindow(let dir):
             focusWindow(dir)
         case .ctrlKey(let key):
@@ -738,6 +766,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // Cmd+] / [: what a two-finger swipe does in Safari, Chrome, Firefox and Finder.
             // There's no public API to post the swipe itself.
             pressInTarget(forward ? 30 : 33, .maskCommand)
+        case .volume(let app, let change):
+            runVolume(app: app, change)
         case .settings:
             openSettings()
         }
@@ -1246,6 +1276,26 @@ enum Main {
         precondition(Command.parse("b saf", d) == .focus("saf"))
         precondition(Command.parse("b h", d) == .focusWindow(.left))
         precondition(Command.parse("b ho", d) == .focus("ho"))
+        precondition(Command.parse("vol set 50", d) == .volume(app: nil, .set(50)))
+        precondition(Command.parse("vol set 101", d) == nil)
+        precondition(Command.parse("vol kk", d) == .volume(app: nil, .step(2)))
+        precondition(Command.parse("vol j", d) == .volume(app: nil, .step(-1)))
+        precondition(Command.parse("vol m", d) == .volume(app: nil, .mute))
+        precondition(Command.parse("vol out", d) == nil)
+        precondition(Command.parse("vol out MacBook Pro Speakers", d) == .volume(app: nil, .output("MacBook Pro Speakers")))
+        precondition(Command.parse("vol google chrome set 30", d) == .volume(app: "google chrome", .set(30)))
+        precondition(Command.parse("vol safari k", d) == .volume(app: "safari", .step(1)))
+        precondition(Command.parse("vol h", d) == nil) // left and right don't change it; "h" is an app name
+        precondition(Command.parse("vol safari out air", d) == .volume(app: "safari", .output("air")))
+        precondition(Command.parse("vol safari", d) == nil)
+        // Every tap output channel gets the tap's left, right, left, … at the gain.
+        var src: [Float32] = [1, 2, 3, 4], dst = [Float32](repeating: 9, count: 6)
+        src.withUnsafeMutableBytes { sb in dst.withUnsafeMutableBytes { db in
+            var inList = AudioBufferList(mNumberBuffers: 1, mBuffers: AudioBuffer(mNumberChannels: 2, mDataByteSize: 16, mData: sb.baseAddress))
+            var outList = AudioBufferList(mNumberBuffers: 1, mBuffers: AudioBuffer(mNumberChannels: 2, mDataByteSize: 24, mData: db.baseAddress))
+            if #available(macOS 14.2, *) { AppRoute.copy(&inList, &outList, gain: 0.5) }
+        } }
+        precondition(dst == [0.5, 1, 1.5, 2, 0, 0]) // frames past the tap's are silent
         let tiles = [CGRect(x: 0, y: 0, width: 100, height: 100), CGRect(x: 200, y: 0, width: 100, height: 100),
                      CGRect(x: 200, y: 200, width: 100, height: 100), CGRect(x: 400, y: 150, width: 100, height: 100)]
         precondition(App.neighbor(of: tiles[0], in: tiles, toward: .right, skip: 0) == 1)
@@ -1433,7 +1483,7 @@ enum Main {
         h.text = "d"
         precondition(h.argPlaceholder == nil)
         h.text = "t  "
-        precondition(h.argPlaceholder == "position")
+        precondition(h.argPlaceholder == "nothing  new window\nh l k j f c  placed there") // one option per line, keys spelled
         h.text = "d 2"
         precondition(h.argPlaceholder == nil)
         h.text = "h "
@@ -1498,6 +1548,29 @@ enum Main {
         precondition(sp.typeDirection("j") && sp.text == "s " && scrolled.count == 4) // no space needed
         sp.text = "o "
         precondition(!sp.scrollKey("j")) // only after the scroll command
+        // Volume mode: "vol " and "vol <app> " step the volume as keys are pressed.
+        sp.text = "vol"
+        precondition(sp.typeDirection("j") && sp.text == "vol " && scrolled.last == .volume(app: nil, .step(-1)))
+        precondition(sp.typeDirection("k") && scrolled.last == .volume(app: nil, .step(1)))
+        precondition(!sp.typeDirection("h") && !sp.typeDirection("l") && sp.text == "vol ") // only down and up
+        sp.text = "vol google chrome "
+        precondition(sp.typeDirection("k") && sp.text == "vol google chrome " && scrolled.last == .volume(app: "google chrome", .step(1)))
+        sp.text = "vol set "
+        precondition(!sp.typeDirection("j")) // types as usual after set, m and out
+        sp.text = "vol saf"
+        precondition(!sp.typeDirection("l")) // inside a name
+        // Two keys of its own: only those (and arrows) step; h and l type an app name.
+        sp.volumeKeys = { "-=" }
+        sp.text = "vol"
+        precondition(sp.typeDirection("=") && sp.text == "vol " && scrolled.last == .volume(app: nil, .step(1)))
+        precondition(sp.typeDirection("-") && scrolled.last == .volume(app: nil, .step(-1)))
+        precondition(!sp.typeDirection("h") && !sp.typeDirection("j"))
+        sp.typeArrow("↓")
+        precondition(scrolled.last == .volume(app: nil, .step(-1)) && sp.text == "vol ")
+        sp.volumeKeys = { "all" } // both: h and j lower it, k and l raise it
+        precondition(sp.typeDirection("h") && scrolled.last == .volume(app: nil, .step(-1)))
+        precondition(sp.typeDirection("l") && scrolled.last == .volume(app: nil, .step(1)) && sp.text == "vol ")
+        sp.volumeKeys = { "" }
         // Tab mode: "ts " switches tabs as left / right are pressed; up / down type as usual.
         sp.text = "ts"
         precondition(sp.typeDirection("l") && sp.text == "ts " && scrolled.last == .switchTab(next: true))
@@ -1674,8 +1747,34 @@ enum Main {
         precondition(ap.appMatches?.map(\.name) == ["Safari"]) // o lists installed apps
         ap.enter()
         precondition(picked == "o Safari")
+        ap.outputs = ["AirPods", "MacBook Pro Speakers"].map { AppItem(name: $0) }
+        ap.currentOutput = { $0 == nil ? "MacBook Pro Speakers" : "AirPods" }
+        ap.text = "vol out "
+        precondition(ap.appMatches?.map(\.current) == [false, true])
+        ap.text = "vol safari out "
+        precondition(ap.appMatches?.map(\.current) == [true, false])
+        ap.text = "vol out m"
+        precondition(ap.appMatches?.map(\.name) == ["MacBook Pro Speakers"])
+        ap.enter()
+        precondition(picked == "vol out MacBook Pro Speakers")
+        ap.text = "vol google chrome out "
+        precondition(ap.appMatches?.count == 2)
+        ap.enter()
+        precondition(picked == "vol google chrome out AirPods")
+        ap.text = "vol set 5"
+        precondition(ap.appMatches == nil)
+        ap.text = "vol saf"
+        precondition(ap.appMatches?.map(\.name) == ["Safari", "Safari Technology Preview"] && ap.appMatches?.first?.pid == 0)
+        ap.enter()
+        precondition(ap.text == "vol Safari ") // filled in, ready for h j k l
+        ap.text = "vol "
+        precondition(ap.appMatches == nil) // the list waits for a name
+        var asked: [String?] = []
+        ap.volumeInfo = { asked.append($0); return nil }
+        for t in ["vol", "vol ", "vol se", "vol saf", "vol google chrome j", "vol out a", "b saf"] { ap.text = t; _ = ap.volumeShown }
+        precondition(asked == [nil, nil, nil, "saf", "google chrome"]) // not after "vol out" (levels are in the list) or b
         ap.text = "d 2"
-        precondition(ap.appMatches == nil) // only after b and o
+        precondition(ap.appMatches == nil) // only after b, o and vol out
         precondition(App.installedApps().contains { $0.name == "Safari" })
         // Discarding input: Ctrl+W drops a word, Esc clears before it closes.
         let e = Palette()

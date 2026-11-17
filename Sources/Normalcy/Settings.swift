@@ -8,6 +8,7 @@ enum Action: String, CaseIterable {
     case scroll, arrows
     case copy, cut, copyWord, cutWord, paste, undo, redo, selectAll, select, deselect, lineStart, lineEnd
     case pointer, pointerStep, hints
+    case volume
     case settings
 
     // Left, down, up, right: the direction keys are these commands' triggers.
@@ -60,6 +61,7 @@ enum Action: String, CaseIterable {
         case .pointer: "mo"
         case .pointerStep: "ms"
         case .hints: "cl"
+        case .volume: "vol"
         case .settings: "set"
         }
     }
@@ -111,6 +113,7 @@ enum Action: String, CaseIterable {
         case .pointer: "Pointer by Halves"
         case .pointerStep: "Pointer by Steps"
         case .hints: "Click by Label"
+        case .volume: "Volume"
         case .settings: "Settings"
         }
     }
@@ -162,6 +165,7 @@ enum Action: String, CaseIterable {
         case .pointer: "cursorarrow.rays"
         case .pointerStep: "cursorarrow.motionlines"
         case .hints: "cursorarrow.click"
+        case .volume: "speaker.wave.2"
         case .settings: "gearshape"
         }
     }
@@ -182,6 +186,7 @@ enum Action: String, CaseIterable {
         case .scroll, .arrows: "Scroll"
         case .copy, .cut, .copyWord, .cutWord, .paste, .undo, .redo, .selectAll, .select, .deselect, .lineStart, .lineEnd: "Edit"
         case .pointer, .pointerStep, .hints: "Pointer"
+        case .volume: "Sound"
         case .settings: "Other"
         }
     }
@@ -203,24 +208,31 @@ enum Action: String, CaseIterable {
         case .select: "<left> <right> <down>"
         case .pointer, .pointerStep: "<left> <down> <up> <right>"
         case .hints: "label"
+        case .volume: "[app] set 0-100, <down> <up>, m, out"
         default: nil
         }
     }
 
-    // What the argument is, shown in the empty key cap after the command and a space.
+    // What the argument can be, shown in the empty key cap after the command and a space:
+    // one option per line, stacked or run together on one line as set in Settings.
     var argName: String? {
         switch self {
         case .open: "app"
-        case .focus: "app or direction"
-        case .desktop, .move: "number or direction"
-        case .tab: "position"
-        case .resize, .scroll, .tabs, .arrows: "direction"
-        case .copy, .cut: "word, line or a for all"
-        case .copyWord, .cutWord: "direction"
-        case .deselect: "end, or <left> for the start"
-        case .select: "word or line"
-        case .pointer, .pointerStep: "direction, Return clicks"
+        case .focus: "app\n<left> <down> <up> <right>  nearest window"
+        case .desktop: "1-9  that desktop\n<left> <right>  next one"
+        case .move: "1-9  to that desktop\n<left> <right>  to the next one"
+        case .tab: "nothing  new window\n<left> <right> <up> <down> f c  placed there"
+        case .resize: "<left> <right>  narrower / wider\n<up> <down>  shorter / taller"
+        case .scroll: "<down> <up>  down / up\n<left> <right>  left / right"
+        case .tabs: "<left>  previous tab\n<right>  next tab"
+        case .arrows: "<left> <down> <up> <right>  arrow keys"
+        case .copy, .cut: "nothing  the selection\n<left> <right>  to the word's start / end\n<down>  the line\na  everything"
+        case .copyWord, .cutWord: "<left>  word before\n<right>  word after"
+        case .deselect: "nothing  cursor at the end\n<left>  cursor at the start"
+        case .select: "<left> <right>  a word\n<down>  the line"
+        case .pointer, .pointerStep: "<left> <down> <up> <right>  move\nReturn  click\nr  right click\n2  double click"
         case .hints: "label"
+        case .volume: "app name, optional\nset 0-100\n<down> <up>  quieter / louder\nm  mute\nout  output device"
         default: nil
         }
     }
@@ -361,6 +373,12 @@ final class Store: ObservableObject {
     @Published var glowKeys = UserDefaults.standard.object(forKey: "glowKeys") as? Bool ?? true { // Glow style's key caps
         didSet { UserDefaults.standard.set(glowKeys, forKey: "glowKeys") }
     }
+    @Published var volumeKeys = UserDefaults.standard.string(forKey: "volumeKeys") ?? "" { // down, up after vol; "" = the window keys
+        didSet { UserDefaults.standard.set(volumeKeys, forKey: "volumeKeys") }
+    }
+    @Published var hintsVertical = UserDefaults.standard.object(forKey: "hintsVertical") as? Bool ?? true { // argument options stacked
+        didSet { UserDefaults.standard.set(hintsVertical, forKey: "hintsVertical") }
+    }
     @Published var showSpaces = UserDefaults.standard.bool(forKey: "showSpaces") {
         didSet { UserDefaults.standard.set(showSpaces, forKey: "showSpaces") }
     }
@@ -471,6 +489,11 @@ struct GeneralSettings: View {
                 }
                 if store.style == .minimal || store.style == .glow && store.glowKeys {
                     Toggle("Show each space as its own key", isOn: $store.showSpaces)
+                    Picker("What a command takes", selection: $store.hintsVertical) {
+                        Text("Vertical").tag(true)
+                        Text("Horizontal").tag(false)
+                    }
+                    .pickerStyle(.segmented)
                 }
                 Toggle("Show the command list", isOn: $store.showList)
                 if store.showList {
@@ -551,8 +574,23 @@ struct CommandSettings: View {
         })
     }
 
+    // vol's own down / up key, showing the window's down / up key while none are set.
+    func volumeKey(_ i: Int) -> Binding<String> {
+        let current = {
+            store.volumeKeys.count == 2 ? Array(store.volumeKeys).map(String.init) // "" or "all": the window's
+                : [Action.bottom, .top].map { a in store.defs.first { $0.id == a.rawValue }?.trigger ?? "" }
+        }
+        return Binding(get: { current()[i] }, set: { v in
+            guard let k = v.last.map({ String($0).lowercased() }), k != " " else { return }
+            var keys = current()
+            guard keys[1 - i] != k else { return } // one key can't mean both
+            keys[i] = k
+            store.volumeKeys = keys.joined()
+        })
+    }
+
     var body: some View {
-        CommandGroups(groups: ["Apps", "Desktops & Tabs", "Edit", "Scroll", "Pointer", "Other"],
+        CommandGroups(groups: ["Apps", "Desktops & Tabs", "Edit", "Scroll", "Pointer", "Sound", "Other"],
                       note: "The key cap is what you type. Click it to change it; switch a command off to hide it.") {
             EmptyView()
         } after: {
@@ -579,6 +617,24 @@ struct CommandSettings: View {
                 Text("Pointer")
             } footer: {
                 Text("Uppercase keys always move 10 points, for the last bit. r and 2 are kept for clicks.")
+                    .settingsFooter()
+            }
+            Section {
+                Picker("Volume keys", selection: $store.volumeKeys) {
+                    Text("Same as windows' down and up").tag("")
+                    Text("All four direction keys").tag("all")
+                    if !["", "all"].contains(store.volumeKeys) { Text("Custom").tag(store.volumeKeys) }
+                }
+                LabeledContent("Quieter, louder") {
+                    HStack(spacing: 6) {
+                        KeyCapField(text: volumeKey(0), label: "Quieter")
+                        KeyCapField(text: volumeKey(1), label: "Louder")
+                    }
+                }
+            } header: {
+                Text("Sound")
+            } footer: {
+                Text("After vol, each press changes the volume 5%. Other keys type an app name. ↓ and ↑ always work. With all four direction keys, left and down lower it, up and right raise it.")
                     .settingsFooter()
             }
         }

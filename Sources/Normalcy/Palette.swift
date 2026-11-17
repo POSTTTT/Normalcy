@@ -11,6 +11,9 @@ struct AppItem: Equatable {
     var icon: NSImage?
     var pid: pid_t = 0
     var path: String?
+    var current = false // "vol out": the device sound plays on now
+    var symbol: String? // "vol out": the device's kind, as an SF Symbol; set only for devices
+    var level: Float? // "vol out": the device's volume, 0-1; nil when it has none
 }
 
 final class Palette: ObservableObject {
@@ -21,6 +24,9 @@ final class Palette: ObservableObject {
     var live: (Command) -> Void = { _ in }
     @Published var apps: [AppItem] = [] // running apps, by name; refreshed when the bar opens
     var installed: [AppItem] = [] // apps in the Applications folders, by name
+    var outputs: [AppItem] = [] // sound output devices, for "vol out"; refreshed when the bar opens
+    var volumeInfo: (String?) -> VolumeInfo? = App.volumeInfo
+    var currentOutput: (String?) -> String? = App.currentOutput // the Mac's, or that app's
     @Published var appPreviews: [pid_t: NSImage] = [:] // pid -> picture of its front window
     var loadPreview: (pid_t) -> Void = { _ in } // runs a command right away, bar staying open
     @Published var selected = 0
@@ -38,6 +44,7 @@ final class Palette: ObservableObject {
     var steps: () -> ResizeSteps = { Store.shared.resizeSteps }
     var pointerStep: () -> CGFloat = { CGFloat(Store.shared.pointerStep) } // points per key after "ms "
     var pointerPreview: () -> Bool = { Store.shared.pointerPreview } // box around what's left after "mo "
+    var volumeKeys: () -> String = { Store.shared.volumeKeys } // down, up after vol; "" = the window's down and up, "all" = all four
     var pointerKeys: () -> String = { Store.shared.pointerKeys } // left, down, up, right for mo / ms; "" = the window keys
     // What's left of the screen after "mo " halvings, as fractions; whole again on Return,
     // Space, or any change to the text (Esc, another command, the bar closing).
@@ -127,7 +134,12 @@ final class Palette: ObservableObject {
         let words = text.split(separator: " ")
         guard words.count == 1, text.hasSuffix(" "),
               let d = Command.lookup(String(words[0]), in: defs()) else { return nil }
-        return Action(rawValue: d.id)?.argName
+        let own = volumeKeys().map(String.init)
+        return Action(rawValue: d.id)?.argName.map { name in
+            guard d.id == Action.volume.rawValue, own.count >= 2 else { return Command.spell(name, defs()) }
+            let keys = own.count == 2 ? own.joined(separator: " ") : "<left> <down> <up> <right>" // "all"
+            return Command.spell(name.replacingOccurrences(of: "<down> <up>", with: keys), defs())
+        }
     }
 
     // Scroll mode: once "s " is typed, a direction key scrolls right away and is never typed,
@@ -139,6 +151,35 @@ final class Palette: ObservableObject {
               let steps = Command.directionSteps(key, defs()) else { return false }
         live(.scroll(steps))
         return true
+    }
+
+    // Volume mode: after "vol " (the Mac) or "vol <app> ", a direction key raises or lowers the
+    // volume right away and is never typed, like scroll mode. To name an app starting with h, j, k
+    // or l, type its first letter in capitals: "vol Hulu". nil: not in volume mode; .some(nil): the Mac.
+    var volumeMode: String?? {
+        let s = text.drop { $0 == " " }
+        guard text.hasSuffix(" "), let head = s.split(separator: " ").first,
+              Command.lookup(String(head), in: defs())?.id == Action.volume.rawValue else { return nil }
+        let rest = s.dropFirst(head.count).trimmingCharacters(in: .whitespaces)
+        if rest.isEmpty { return .some(nil) }
+        return Command.volumeParts(rest, defs()) == nil ? .some(rest) : nil // not after set, m or out
+    }
+
+    func volumeKey(_ key: String) -> Bool {
+        guard let app = volumeMode, let n = volumeStep(key) else { return false }
+        live(.volume(app: app, .step(n)))
+        return true
+    }
+
+    // -1 quieter, 1 louder: the two keys set in Settings, else the window's down and up keys.
+    // ↓ and ↑ always work. "all": left and down lower it, up and right raise it.
+    func volumeStep(_ key: String) -> Int? {
+        if volumeKeys() == "all" { return Command.directionSteps(key, defs()).map { Int($0.width - $0.height) } }
+        let own = Array(volumeKeys())
+        if own.count == 2, Command.arrowAction(key) == nil {
+            return key.count == 1 ? own.firstIndex(of: Character(key)).map { $0 == 0 ? -1 : 1 } : nil
+        }
+        return Command.volumeSteps(key, defs())
     }
 
     // Tab mode: once "ts " is typed, left / right go to the previous / next tab right away
@@ -275,14 +316,15 @@ final class Palette: ObservableObject {
     // text plus the key starts another trigger. Returns false when the key should be typed as usual.
     func typeDirection(_ key: String) -> Bool {
         let defs = defs()
-        if scrollKey(key) || tabKey(key) || arrowKey(key) || pointerKey(key) { return true }
+        if scrollKey(key) || tabKey(key) || arrowKey(key) || pointerKey(key) || volumeKey(key) { return true }
         guard let head = defs.first(where: { $0.enabled && $0.trigger == text }).flatMap({ Action(rawValue: $0.id) }) else { return false }
         // mo and ms may have their own direction keys.
         if head == .hints { return false } // "cl" + h would click label h at once
-        let isDirection = head == .pointer || head == .pointerStep ? pointerDirection(key) != nil : Command.direction(key, in: defs) != nil
+        let isDirection = head == .pointer || head == .pointerStep ? pointerDirection(key) != nil
+            : head == .volume ? volumeStep(key) != nil : Command.direction(key, in: defs) != nil
         guard isDirection, head.argHint != nil, !defs.contains(where: { $0.enabled && $0.trigger.hasPrefix(text + key) }) else { return false }
         text += " "
-        if !scrollKey(key), !tabKey(key), !arrowKey(key), !pointerKey(key) { text += key }
+        if !scrollKey(key), !tabKey(key), !arrowKey(key), !pointerKey(key), !volumeKey(key) { text += key }
         return true
     }
 
@@ -310,6 +352,19 @@ final class Palette: ObservableObject {
         text = t
     }
 
+    // While "vol" is typed: the level of the Mac's output, or of the app named so far
+    // ("vol saf" before a verb is typed; not "vol se" or "vol ou", on their way to set and out).
+    var volumeShown: VolumeInfo? {
+        let s = text.drop { $0 == " " }
+        guard let head = s.split(separator: " ").first,
+              Command.lookup(String(head), in: defs())?.id == Action.volume.rawValue else { return nil }
+        let rest = s.dropFirst(head.count).trimmingCharacters(in: .whitespaces)
+        if let p = Command.volumeParts(rest, defs()), p.verb == "out", p.app == nil { return nil } // levels are in the list
+        let app = rest.isEmpty ? nil : Command.volumeParts(rest, defs()).map(\.app)
+            ?? (["set", "out"].contains { $0.hasPrefix(rest) } ? nil : rest)
+        return volumeInfo(app)
+    }
+
     // After the switch or open command and a space ("b saf", "o saf"): running or installed apps
     // whose name starts with what's typed.
     var appMatches: [AppItem]? {
@@ -320,6 +375,18 @@ final class Palette: ObservableObject {
         switch id {
         case Action.focus.rawValue: pool = apps
         case Action.open.rawValue: pool = installed
+        case Action.volume.rawValue:
+            let rest = s[s.index(after: sp)...].trimmingCharacters(in: .whitespaces)
+            // "vol saf": running apps whose name starts with it, without the window preview.
+            guard let p = Command.volumeParts(rest, defs()) else {
+                return rest.isEmpty ? nil : apps.filter { $0.name.lowercased().hasPrefix(rest.lowercased()) }
+                    .map { AppItem(name: $0.name, icon: $0.icon) }
+            }
+            // "vol out " / "vol safari out ": the output devices.
+            guard p.verb == "out" else { return nil }
+            let now = currentOutput(p.app)
+            return outputs.filter { p.rest.isEmpty || $0.name.lowercased().hasPrefix(p.rest.lowercased()) }
+                .map { var d = $0; d.current = d.name == now; return d }
         default: return nil
         }
         let q = s[s.index(after: sp)...].trimmingCharacters(in: .whitespaces).lowercased()
@@ -338,11 +405,22 @@ final class Palette: ObservableObject {
     // Shift+Enter does the same but keeps going: the bar comes back for another command.
     func enter(continuing: Bool = false) {
         let run = continuing ? submitContinuing : submit
-        // Return in tab or arrow mode just closes the bar: the keys already went to the app.
-        if !continuing, tabMode || arrowMode { return cancel() }
+        // "vol saf": Return fills in the highlighted app, ready for h j k l, set, m or out.
+        if let list = appMatches, list.indices.contains(selected), let head = text.split(separator: " ").first,
+           Command.lookup(String(head), in: defs())?.id == Action.volume.rawValue, !text.contains(" out") {
+            let filled = head + " " + list[selected].name + " "
+            if text != filled { text = filled; return }
+        }
+        // Return in tab, arrow or volume mode just closes the bar: the keys already did their work.
+        if !continuing, tabMode || arrowMode || volumeMode != nil { return cancel() }
         defer { pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1) } // the next "mo " starts from the whole screen
         // Picking from the app list switches to the highlighted app.
         if let list = appMatches, list.indices.contains(selected), let head = text.split(separator: " ").first {
+            // "vol [app] out": everything up to "out" stays.
+            if Command.lookup(String(head), in: defs())?.id == Action.volume.rawValue,
+               let out = text.range(of: " out", options: .backwards) {
+                return run(text[..<out.upperBound] + " " + list[selected].name)
+            }
             return run(head + " " + list[selected].name)
         }
         // Shift+Enter with nothing it can run finishes it: the bar stays up, empty, for the next
@@ -462,6 +540,10 @@ struct PaletteView: View {
             desktopStrip(cmd)
                 .transition(.opacity.combined(with: .scale(scale: 0.97)))
         }
+        if let v = model.volumeShown {
+            volumeMeter(v)
+                .transition(.opacity.combined(with: .scale(scale: 0.97)))
+        }
         if let apps = model.appMatches {
             if apps.indices.contains(model.selected), apps[model.selected].pid != 0 { // running apps only
                 appPreview(apps[model.selected])
@@ -531,7 +613,7 @@ struct PaletteView: View {
             }
             // What it is, or what it wants next: muted, like a Live Activity's trailing detail.
             // No spacer: the whole line stays centered under the notch.
-            if let detail = hint.map({ "‹\($0)›" }) ?? head?.title {
+            if let detail = hint.map({ $0.replacingOccurrences(of: "\n", with: " · ") }) ?? head?.title {
                 Text(detail)
                     .padding(.leading, 4)
                     .font(.system(size: 13, weight: .medium))
@@ -569,10 +651,14 @@ struct PaletteView: View {
         return HStack(spacing: 8) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { i, word in
                 let hint = i == blocks.count - 1 ? model.argPlaceholder : nil
-                Text(hint.map { "‹\($0)›" } ?? Palette.spacedArrows(word))
-                    .font(hint == nil ? .system(size: 22, weight: .medium, design: .monospaced) : .system(size: 17))
+                let stacked = store.hintsVertical && hint?.contains("\n") == true
+                Text(hint.map { stacked ? $0 : $0.replacingOccurrences(of: "\n", with: " · ") } ?? Palette.spacedArrows(word))
+                    .font(hint == nil ? .system(size: 22, weight: .medium, design: .monospaced) : .system(size: stacked ? 14 : 17))
                     .foregroundStyle(hint == nil ? .primary : .secondary)
+                    .multilineTextAlignment(.leading)
+                    .lineSpacing(3)
                     .padding(.horizontal, 14)
+                    .padding(.vertical, stacked ? 10 : 0)
                     .frame(minWidth: 44, minHeight: 44)
                     .glass(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .transition(reduceMotion ? .opacity : .scale(scale: 0.9).combined(with: .opacity))
@@ -718,14 +804,61 @@ struct PaletteView: View {
         .task(id: app.pid) { model.loadPreview(app.pid) }
     }
 
+    func volumeMeter(_ v: VolumeInfo) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: v.muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                .font(.system(size: 18)).frame(width: 26)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(v.title).font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
+                GeometryReader { g in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.primary.opacity(0.12))
+                        Capsule().fill(Color.primary.opacity(v.muted ? 0.3 : 0.8))
+                            .frame(width: g.size.width * CGFloat(v.level ?? 0))
+                    }
+                }
+                .frame(height: 6)
+            }
+            Text(v.level == nil ? "No control" : v.muted ? "Muted" : Volume.percent(v.level!))
+                .font(.system(size: 15).monospacedDigit())
+                .frame(minWidth: 48, alignment: .trailing)
+        }
+        .padding(.horizontal, 22)
+        .frame(height: 64)
+        .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .animation(motion(0.15), value: v)
+        .accessibilityElement(children: .combine)
+    }
+
     func appRow(_ app: AppItem, selected: Bool) -> some View {
         HStack(spacing: 14) {
-            if let icon = app.icon ?? app.path.map(NSWorkspace.shared.icon(forFile:)) {
+            if let symbol = app.symbol {
+                // An output device: its kind in a circle, filled blue for the one in use, and its volume.
+                Image(systemName: symbol)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(app.current ? Color.white : Color.primary)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(app.current ? Color.accentColor : Color.primary.opacity(0.12)))
+            } else if let icon = app.icon ?? app.path.map(NSWorkspace.shared.icon(forFile:)) {
                 Image(nsImage: icon).resizable().frame(width: 26, height: 26)
             }
-            Text(app.name).font(.system(size: 15))
+            Text(app.name).font(.system(size: 15)).lineLimit(1)
             Spacer()
+            if app.symbol != nil {
+                Image(systemName: "speaker.wave.2.fill").font(.system(size: 12)).foregroundStyle(.secondary)
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.12))
+                    Capsule().fill(Color.accentColor).frame(width: 150 * CGFloat(app.level ?? 0))
+                }
+                .frame(width: 150, height: 5)
+                Text(app.level.map(Volume.percent) ?? "–")
+                    .font(.system(size: 12).monospacedDigit()).foregroundStyle(.secondary)
+                    .frame(width: 40, alignment: .trailing)
+            }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(app.name)
+        .accessibilityValue(app.symbol == nil ? "" : [app.current ? "in use" : nil, app.level.map(Volume.percent)].compactMap { $0 }.joined(separator: ", "))
         .padding(.horizontal, 14)
         .frame(height: 40)
         .background {
@@ -784,7 +917,9 @@ struct PaletteView: View {
             HStack(spacing: 6) {
                 KeyCap(d.trigger)
                 if let arg = a?.argName {
-                    Text(arg).font(.system(size: 12)).foregroundStyle(.secondary)
+                    // A list row stays one line; the options stack only in the key cap.
+                    Text(Command.spell(arg.replacingOccurrences(of: "\n", with: " · "), model.defs()))
+                        .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
         }

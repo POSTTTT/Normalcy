@@ -45,6 +45,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSAudioCaptureUsageDescription</key><string>Normalcy routes an app's sound through itself to set that app's volume and output (vol &lt;app&gt;).</string>
 </dict>
 </plist>
 PLIST

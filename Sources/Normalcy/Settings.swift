@@ -554,22 +554,33 @@ struct GeneralSettings: View {
                         ForEach(Position.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
                     }
                 }
-                if store.style == .glow {
-                    Toggle("Key caps", isOn: $store.glowKeys)
-                }
-                if store.style == .minimal || store.style == .glow && store.glowKeys {
-                    Toggle("Space as a key", isOn: $store.showSpaces)
-                    Toggle("Options", isOn: $store.showHints)
-                    if store.showHints {
-                        ChoiceCards(selection: $store.hintsVertical, choices: [
-                            (true, "Vertical", AnyView(StylePicture.hint(vertical: true))),
-                            (false, "Horizontal", AnyView(StylePicture.hint(vertical: false))),
-                        ])
+            } header: {
+                Text("Command Bar")
+            } footer: {
+                Text(store.style.note)
+                    .settingsFooter()
+            }
+            if store.style == .minimal || store.style == .glow {
+                Section("Key Caps") {
+                    if store.style == .glow {
+                        Toggle("Show key caps", isOn: $store.glowKeys)
+                    }
+                    if store.style == .minimal || store.glowKeys {
+                        Toggle("Space as a key", isOn: $store.showSpaces)
+                        Toggle("Options", isOn: $store.showHints)
+                        if store.showHints {
+                            Picker("Options layout", selection: $store.hintsVertical) {
+                                Text("Vertical").tag(true)
+                                Text("Horizontal").tag(false)
+                            }
+                        }
                     }
                 }
+            }
+            Section {
                 Toggle("Command list", isOn: $store.showList)
                 if store.showList {
-                    Picker("Layout", selection: $store.listStyle) {
+                    Picker("List layout", selection: $store.listStyle) {
                         Text("Grid").tag(ListStyle.grid)
                         Text("Grouped").tag(ListStyle.grouped)
                     }
@@ -577,14 +588,52 @@ struct GeneralSettings: View {
                 Toggle("Window previews", isOn: $store.windowPreviews)
                 Toggle("Desktop previews", isOn: $store.desktopPreviews)
             } header: {
-                Text("Command Bar")
-            } footer: {
-                Text(store.style.note)
-                    .settingsFooter()
+                Text("Show")
             }
             UpdateSection()
         }
         .formStyle(.grouped)
+    }
+}
+
+// Text naming commands, each shown as its current trigger in a key cap, so a renamed
+// trigger reads right: CommandText("Desktop strip in", [.desktop, .move]).
+struct CommandText: View {
+    @ObservedObject var store = Store.shared
+    let before: String
+    let actions: [Action]
+    let after: String
+    init(_ before: String, _ actions: [Action], _ after: String = "") {
+        (self.before, self.actions, self.after) = (before, actions, after)
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if !before.isEmpty { Text(before) }
+            ForEach(actions, id: \.self) { a in KeyCap(store.defs.first { $0.id == a.rawValue }?.trigger ?? "") }
+            if !after.isEmpty { Text(after) }
+        }
+    }
+}
+
+// A switch with a subtitle, centered on both lines; a plain Toggle lines it up with the title only.
+struct SubtitledToggle<Subtitle: View>: View {
+    let title: String
+    @Binding var isOn: Bool
+    let subtitle: Subtitle
+    init(_ title: String, isOn: Binding<Bool>, @ViewBuilder subtitle: () -> Subtitle) {
+        (self.title, _isOn, self.subtitle) = (title, isOn, subtitle())
+    }
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                subtitle.settingsFooter()
+            }
+            Spacer()
+            Toggle(title, isOn: $isOn).labelsHidden().toggleStyle(.switch)
+        }
     }
 }
 
@@ -672,17 +721,19 @@ struct CommandSettings: View {
     }
 
     @ViewBuilder var desktopOptions: some View {
-        Picker("d left / right", selection: $store.desktopInstant) {
+        Picker(selection: $store.desktopInstant) {
             Text("Switch as you press").tag(true)
             Text("Pick, then Return").tag(false)
+        } label: {
+            CommandText("", [.desktop], "left / right")
         }
     }
 
     @ViewBuilder var pointerOptions: some View {
         Stepper(value: $store.pointerStep, in: 10...400, step: 10) {
-            LabeledContent("ms step", value: "\(store.pointerStep) points")
+            LabeledContent { Text("\(store.pointerStep) points") } label: { CommandText("", [.pointerStep], "step") }
         }
-        Toggle("Show mo area", isOn: $store.pointerPreview)
+        SubtitledToggle("Show area", isOn: $store.pointerPreview) { CommandText("Box around what's left in", [.pointer]) }
         Picker("Direction keys", selection: $store.pointerKeys) {
             Text("Windows").tag("")
             ForEach(WindowSettings.presets, id: \.0) { Text($0.1).tag($0.0) }
@@ -727,12 +778,12 @@ struct WindowSettings: View {
 
     @ViewBuilder var resizeOptions: some View {
         Stepper(value: $store.growPercent, in: 1...50) {
-            LabeledContent("+ −", value: "\(store.growPercent)%")
+            LabeledContent { Text("\(store.growPercent)%") } label: { CommandText("", [.grow, .shrink], "step") }
         }
         Stepper(value: $store.edgePercent, in: 1...25) {
-            LabeledContent("re step", value: "\(store.edgePercent)% of screen")
+            LabeledContent { Text("\(store.edgePercent)% of screen") } label: { CommandText("", [.resize], "step") }
         }
-        Toggle("Resize neighbor", isOn: $store.resizeNeighbors)
+        SubtitledToggle("Resize neighbor", isOn: $store.resizeNeighbors) { CommandText("The window beside it changes too, in", [.resize]) }
     }
 }
 
@@ -1213,26 +1264,6 @@ enum StylePicture {
             Spacer()
             LinearGradient(colors: [.blue, .purple, .pink, .orange], startPoint: .leading, endPoint: .trailing)
                 .frame(height: 5).blur(radius: 3).opacity(0.9)
-        }
-    }
-
-    // The empty key cap after a command: options stacked, or in one line.
-    static func hint(vertical: Bool) -> some View {
-        HStack(alignment: .center, spacing: 4) {
-            cap()
-            Group {
-                if vertical {
-                    VStack(alignment: .leading, spacing: 3) {
-                        ForEach([30, 22, 26], id: \.self) { w in RoundedRectangle(cornerRadius: 1).fill(ink).frame(width: CGFloat(w), height: 3) }
-                    }
-                } else {
-                    HStack(spacing: 3) {
-                        ForEach([14, 10, 12], id: \.self) { w in RoundedRectangle(cornerRadius: 1).fill(ink).frame(width: CGFloat(w), height: 3) }
-                    }
-                }
-            }
-            .padding(5)
-            .background(RoundedRectangle(cornerRadius: 3, style: .continuous).fill(faint))
         }
     }
 }

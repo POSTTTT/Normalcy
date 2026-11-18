@@ -598,7 +598,7 @@ struct PaletteView: View {
 
     @ViewBuilder var content: some View {
         let rows = model.matches
-        if let cmd = model.desktopCommand, model.desktops.count > 0 {
+        if store.desktopPreviews, let cmd = model.desktopCommand, model.desktops.count > 0 {
             desktopStrip(cmd)
                 .transition(.opacity.combined(with: .scale(scale: 0.97)))
         }
@@ -878,11 +878,11 @@ struct PaletteView: View {
         .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .animation(motion(0.18) ?? .linear(duration: 0.1), value: wins.map(\.id))
         .animation(motion(0.15), value: model.selected)
-        .task(id: wins.map(\.id)) { model.loadShots(wins.map(\.id).filter { $0 != 0 && model.windowShots[$0] == nil }) }
+        .task(id: wins.map(\.id)) { if store.windowPreviews { model.loadShots(wins.map(\.id).filter { $0 != 0 && model.windowShots[$0] == nil }) } }
     }
 
     func windowTile(_ w: WindowItem, selected: Bool) -> some View {
-        let shot = model.windowShots[w.id]
+        let shot = store.windowPreviews ? model.windowShots[w.id] : nil // off: the app icon
         let note = w.hidden ? "Hidden" : w.id == 0 ? "No open window" : w.title.isEmpty ? "" : w.app
         return VStack(spacing: 2) {
             ZStack(alignment: .bottomLeading) {

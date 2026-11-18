@@ -408,6 +408,12 @@ final class Store: ObservableObject {
     @Published var growPercent = UserDefaults.standard.object(forKey: "growPercent") as? Int ?? 10 {
         didSet { UserDefaults.standard.set(growPercent, forKey: "growPercent") }
     }
+    @Published var windowPreviews = UserDefaults.standard.object(forKey: "windowPreviews") as? Bool ?? true { // b's window pictures
+        didSet { UserDefaults.standard.set(windowPreviews, forKey: "windowPreviews") }
+    }
+    @Published var desktopPreviews = UserDefaults.standard.object(forKey: "desktopPreviews") as? Bool ?? true { // d / m's desktop strip
+        didSet { UserDefaults.standard.set(desktopPreviews, forKey: "desktopPreviews") }
+    }
     @Published var pointerPreview = UserDefaults.standard.object(forKey: "pointerPreview") as? Bool ?? true { // mo's area box
         didSet { UserDefaults.standard.set(pointerPreview, forKey: "pointerPreview") }
     }
@@ -562,6 +568,8 @@ struct GeneralSettings: View {
                         Text("Grouped").tag(ListStyle.grouped)
                     }
                 }
+                Toggle("Window previews", isOn: $store.windowPreviews)
+                Toggle("Desktop previews", isOn: $store.desktopPreviews)
             } header: {
                 Text("Command Bar")
             } footer: {

@@ -620,7 +620,7 @@ struct PaletteView: View {
 
     @ViewBuilder var content: some View {
         let rows = model.matches
-        if store.desktopPreviews, let cmd = model.desktopCommand, model.desktops.count > 0 {
+        if let cmd = model.desktopCommand, model.desktops.count > 0 {
             desktopStrip(cmd)
                 .transition(.opacity.combined(with: .scale(scale: 0.97)))
         }
@@ -754,7 +754,8 @@ struct PaletteView: View {
     }
 
     // Mission Control-style thumbnails: target gets the accent border, current a faint one.
-    // Click a thumbnail to go/move there.
+    // Click a thumbnail to go/move there. With desktop previews off, numbered boxes instead,
+    // so where you are and how many there are still show.
     func desktopStrip(_ cmd: CommandDef) -> some View {
         let d = model.desktops
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -762,20 +763,33 @@ struct PaletteView: View {
             ForEach(Array(d.ids.enumerated()), id: \.element) { i, id in
                 let n = i + 1
                 let isTarget = n == model.desktopTarget
-                VStack(spacing: 6) {
-                    Color.clear
-                        .aspectRatio(16 / 10, contentMode: .fit)
-                        .overlay { thumbnail(id) }
-                        .clipShape(shape)
-                        .overlay(shape.strokeBorder(isTarget ? Color.accentColor : Color.white.opacity(n == d.current ? 0.6 : 0.15),
-                                                    lineWidth: isTarget ? 3 : 1))
-                    Text("Desktop \(n)")
-                        .font(.system(size: 12, weight: n == d.current ? .semibold : .regular))
-                        .foregroundStyle(n == d.current ? .primary : .secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
+                let border = shape.strokeBorder(isTarget ? Color.accentColor : Color.white.opacity(n == d.current ? 0.6 : 0.15),
+                                                lineWidth: isTarget ? 3 : 1)
+                Group {
+                    if !store.desktopPreviews {
+                        Text("\(n)")
+                            .font(.system(size: 15, weight: n == d.current ? .semibold : .regular).monospacedDigit())
+                            .foregroundStyle(n == d.current || isTarget ? .primary : .secondary)
+                            .frame(maxWidth: 56).frame(height: 36)
+                            .background(shape.fill(Color.primary.opacity(n == d.current ? 0.14 : 0.05)))
+                            .overlay(border)
+                            .accessibilityLabel("Desktop \(n)" + (n == d.current ? ", current" : ""))
+                    } else {
+                        VStack(spacing: 6) {
+                            Color.clear
+                                .aspectRatio(16 / 10, contentMode: .fit)
+                                .overlay { thumbnail(id) }
+                                .clipShape(shape)
+                                .overlay(border)
+                            Text("Desktop \(n)")
+                                .font(.system(size: 12, weight: n == d.current ? .semibold : .regular))
+                                .foregroundStyle(n == d.current ? .primary : .secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.6)
+                        }
+                        .frame(maxWidth: 160)
+                    }
                 }
-                .frame(maxWidth: 160)
                 .contentShape(Rectangle())
                 .onTapGesture { model.submit("\(cmd.trigger) \(n)") }
             }

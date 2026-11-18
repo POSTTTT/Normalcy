@@ -18,7 +18,7 @@ then `h` gives `d h`.
 | Trigger | Command | Input | What it does |
 | --- | --- | --- | --- |
 | `o` | Open App | an app name | Opens the app. The list shows installed apps as you type: `o saf` |
-| `b` | Switch to App | an app name, or a direction | Brings a running app to the front, matching the start of its name: `b saf`. With a direction, switches to the nearest window that way: `b l` |
+| `b` | Switch to App | an app name or window title, or a direction | Shows every window on every desktop as a picture, under its desktop, plus running apps with no window. Type to narrow it by app name or window title: `b saf`, `b github`. Arrows, or `h` `j` `k` `l` before you type a name, move the highlight; Return goes to that window, switching desktops if needed. `b` then a direction key (no space typed) still switches to the nearest window that way: `b l` |
 
 ## Desktops and tabs
 

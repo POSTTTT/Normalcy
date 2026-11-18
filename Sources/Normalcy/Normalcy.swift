@@ -523,11 +523,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self, panel.isVisible else { return }
             preview.order(hints.isEmpty ? .below : .above, relativeTo: panel.windowNumber)
         }.store(in: &subs)
-        palette.loadPreview = { [weak self] pid in
-            Task { @MainActor in
-                if let img = await Snapshot.appWindow(pid) { self?.palette.appPreviews[pid] = img }
-            }
+        palette.loadShots = { [weak self] ids in
+            Task { @MainActor in await Snapshot.windows(ids) { self?.palette.windowShots[$0] = $1 } }
         }
+        palette.pickWindow = { [weak self] w in self?.hide(); self?.focus(w) }
         panel.contentView = NSHostingView(rootView: PaletteView(model: palette))
         preview.contentView = NSHostingView(rootView: LayoutPreview(model: palette))
         preview.isOpaque = false
@@ -591,6 +590,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         palette.desktops = Desktops.read()
         loadWallpaper()
         snapshotDesktop()
+        palette.windows = windowItems() // after snapshotDesktop, which updates `seen`
+        palette.previousWindow = previousWindow(in: palette.windows)
+        palette.windowShots = [:]
         // A screen-tall column; the view places its content inside by style and position.
         if let screen = NSScreen.main {
             let v = screen.visibleFrame
@@ -667,6 +669,67 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             .filter { withWindow.contains($0.processIdentifier) || $0.bundleIdentifier == "com.apple.finder" }
             .map { AppItem(name: $0.localizedName ?? "", icon: $0.icon, pid: $0.processIdentifier) }
             .sorted { (rank($0.pid), $0.name.lowercased()) < (rank($1.pid), $1.name.lowercased()) }
+    }
+
+    // Every window for "b ", under its desktop in order, then full-screen apps, then running apps
+    // with no window open. Front to back within a desktop. Windows on other desktops are listed
+    // only once seen on screen, since apps' kept-around closed windows look just like them.
+    func windowItems() -> [WindowItem] {
+        let desks = Desktops.read()
+        let all = Snapshot.windowsBySpace()
+        let apps = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular && $0 != .current }
+        let byPid = Dictionary(apps.map { ($0.processIdentifier, $0) }, uniquingKeysWith: { a, _ in a })
+        var out: [WindowItem] = [], taken = Set<CGWindowID>()
+        for space in desks.ids + all.keys.filter({ !desks.ids.contains($0) }).sorted() {
+            let n = desks.ids.firstIndex(of: space)
+            let group = n.map { "Desktop \($0 + 1)" + (space == desks.currentID ? " · Current" : "") } ?? "Full Screen"
+            for w in all[space, default: []] where space == desks.currentID ? w.onScreen : seen.contains(w.id) {
+                guard let app = byPid[w.pid], taken.insert(w.id).inserted else { continue } // a window on all desktops lists once
+                out.append(WindowItem(id: w.id, pid: w.pid, app: app.localizedName ?? "", title: w.title, icon: app.icon, space: space, group: group))
+            }
+        }
+        let withWindow = Set(out.map(\.pid))
+        return out + apps.filter { !withWindow.contains($0.processIdentifier) }
+            .sorted { ($0.localizedName ?? "").lowercased() < ($1.localizedName ?? "").lowercased() }
+            .map { WindowItem(pid: $0.processIdentifier, app: $0.localizedName ?? "", icon: $0.icon, group: "No Windows", hidden: $0.isHidden) }
+    }
+
+    // The window used before the one in front: the second one on this desktop, front to back,
+    // else the front window of the app used before (on another desktop, say).
+    // shortcut: stacking order stands in for when windows were used; track window focus if it guesses wrong.
+    func previousWindow(in list: [WindowItem]) -> CGWindowID? {
+        let current = Desktops.read().currentID
+        let here = list.filter { $0.id != 0 && $0.space == current }
+        if here.count > 1 { return here[1].id }
+        let pid = recentApps.first { $0 != target?.processIdentifier && $0 != NSRunningApplication.current.processIdentifier }
+        return list.first { $0.id != 0 && $0.pid == pid }?.id
+    }
+
+    // "b ": brings that window forward, going to its desktop first when it's on another.
+    func focus(_ w: WindowItem) {
+        guard let app = NSRunningApplication(processIdentifier: w.pid) else { return NSSound.beep() }
+        let raise = { [weak self] in
+            if w.id != 0, let ax = self?.axWindow(w.pid, id: w.id) {
+                AXUIElementSetAttributeValue(ax, kAXMainAttribute as CFString, kCFBooleanTrue)
+                AXUIElementPerformAction(ax, kAXRaiseAction as CFString)
+            }
+            app.unhide()
+            app.activate()
+        }
+        let desks = Desktops.read()
+        // Another app's windows are reachable through Accessibility only on the desktop on screen.
+        if w.space != desks.currentID, let n = desks.ids.firstIndex(of: w.space), n < Command.digitKeys.count {
+            run(.ctrlKey(Command.digitKeys[n]))
+            // shortcut: fixed wait for the switch to land; lengthen if the window doesn't come forward.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: raise)
+        } else {
+            raise() // full screen, or past desktop 9: activating the app takes macOS to one of its windows
+        }
+    }
+
+    func axWindow(_ pid: pid_t, id: CGWindowID) -> AXUIElement? {
+        let ax: [AXUIElement] = axAttr(AXUIElementCreateApplication(pid), kAXWindowsAttribute) ?? []
+        return ax.first { var wid: CGWindowID = 0; return _AXUIElementGetWindow($0, &wid) == .success && wid == id }
     }
 
     var recentApps: [pid_t] = [] // pids by last activation, newest first, since Normalcy started
@@ -1287,6 +1350,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 }
 
+// Private Accessibility API: an AX window's CGWindowID. Read-only, works with SIP on.
+@_silgen_name("_AXUIElementGetWindow") func _AXUIElementGetWindow(_ e: AXUIElement, _ id: inout CGWindowID) -> AXError
+
 func axAttr<T>(_ e: AXUIElement, _ name: String) -> T? {
     var v: CFTypeRef?
     guard AXUIElementCopyAttributeValue(e, name as CFString, &v) == .success else { return nil }
@@ -1780,20 +1846,42 @@ enum Main {
         var left: CGFloat = -263, frames = 0
         while App.scrollPart(left) != 0 { left -= CGFloat(App.scrollPart(left)); frames += 1 }
         precondition(abs(left) < 1 && frames < 40)
-        // "b " lists running apps, filtered by what's typed; Enter switches to the highlighted one.
+        // "b " lists every window under its desktop, filtered by app name or title; direction keys
+        // move around the grid and Enter switches to the highlighted window.
         let ap = Palette()
         ap.defs = { d }
         ap.apps = ["Discord", "Safari", "Safari Technology Preview", "Slack"].map { AppItem(name: $0) }
-        var picked: String?
+        ap.windows = [WindowItem(id: 1, pid: 1, app: "Discord", group: "Desktop 1"),
+                      WindowItem(id: 2, pid: 2, app: "Safari", title: "Apple", group: "Desktop 1"),
+                      WindowItem(id: 3, pid: 2, app: "Safari", title: "GitHub", group: "Desktop 2"),
+                      WindowItem(pid: 3, app: "Slack", group: "No Windows")]
+        var picked: String?, pickedWindow: CGWindowID?
         ap.submit = { picked = $0 }
+        ap.pickWindow = { pickedWindow = $0.id }
         ap.text = "b "
-        precondition(ap.appMatches?.count == 4)
+        precondition(ap.windowMatches?.count == 4 && ap.appMatches == nil)
+        precondition(Palette.gridRows(ap.windowMatches!) == [[0, 1], [2], [3]])
+        precondition(ap.typeDirection("j") && ap.selected == 2 && ap.text == "b ") // down a row, not typed
+        precondition(ap.typeDirection("k") && ap.selected == 0)
+        precondition(ap.typeDirection("l") && ap.selected == 1)
+        precondition(ap.typeDirection("j") && ap.selected == 2) // the row below is shorter
+        precondition(ap.typeDirection("l") && ap.selected == 3 && !ap.typeDirection("x"))
+        ap.text = "b git"
+        precondition(ap.windowMatches?.map(\.id) == [3]) // by title
         ap.text = "b saf"
-        precondition(ap.appMatches?.map(\.name) == ["Safari", "Safari Technology Preview"])
+        precondition(ap.windowMatches?.map(\.id) == [2, 3])
         ap.move(1)
         ap.text = "b saf" // same text written back on a redraw keeps the highlight
         ap.enter()
-        precondition(picked == "b Safari Technology Preview")
+        precondition(pickedWindow == 3)
+        ap.previousWindow = 3
+        ap.text = "b "
+        precondition(ap.selected == 2) // starts on the previous window, like Cmd+Tab
+        ap.text = "b s"
+        precondition(ap.selected == 0) // a name typed: the best match
+        ap.previousWindow = nil
+        ap.text = "b"
+        precondition(ap.typeDirection("l") && ap.text == "b l" && ap.windowMatches == nil) // still the nearest window
         ap.text = "o saf"
         ap.installed = [AppItem(name: "Safari", path: "/Applications/Safari.app"), AppItem(name: "Slack", path: "/Applications/Slack.app")]
         precondition(ap.appMatches?.map(\.name) == ["Safari"]) // o lists installed apps

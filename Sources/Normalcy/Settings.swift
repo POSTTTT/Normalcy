@@ -233,7 +233,7 @@ enum Action: String, CaseIterable {
     var argName: String? {
         switch self {
         case .open: "app"
-        case .focus: "app\n<left> <down> <up> <right>  nearest window"
+        case .focus: "app or window title, then <left> <down> <up> <right> to pick\n<left> <down> <up> <right>  nearest window"
         case .desktop: "1-9  that desktop\n<left> <right>  next one"
         case .move: "1-9  to that desktop\n<left> <right>  to the next one"
         case .tab: "nothing  new window\n<left> <right> <up> <down> f c  placed there"

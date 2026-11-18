@@ -73,7 +73,7 @@ enum Snapshot {
         return NSImage(cgImage: cg, size: .zero)
     }
 
-    typealias Window = (id: CGWindowID, frame: CGRect, onScreen: Bool)
+    typealias Window = (id: CGWindowID, frame: CGRect, onScreen: Bool, pid: pid_t, title: String)
 
     // Windows of regular, visible apps on every desktop, front to back, by space ID, plus any
     // windows named in `also` (Normalcy's Settings; Normalcy itself is a menu bar app). Frames
@@ -95,7 +95,8 @@ enum Snapshot {
                   let frame = CGRect(dictionaryRepresentation: b), frame.width > 50, frame.height > 50 else { continue }
             let spaces = CGSCopySpacesForWindows(CGSMainConnectionID(), 7, [id] as CFArray) as? [Int] ?? []
             let onScreen = w[kCGWindowIsOnscreen as String] as? Bool ?? false
-            for s in spaces { out[s, default: []].append((id, frame, onScreen)) }
+            let title = w[kCGWindowName as String] as? String ?? "" // empty without Screen Recording
+            for s in spaces { out[s, default: []].append((id, frame, onScreen, pid, title)) }
         }
         return out
     }
@@ -136,29 +137,21 @@ enum Snapshot {
         }
     }
 
-    // The app's front window: one showing on this desktop if any, else its largest elsewhere.
-    // Needs Screen Recording permission; nil without it or when the app has no window.
-    // shortcut: an app's kept-around closed windows can be picked when nothing is on screen.
+    // Pictures of these windows, on any desktop, handed over one by one as they're taken.
+    // Needs Screen Recording permission; hands over nothing without it.
     @MainActor
-    static func appWindow(_ pid: pid_t) async -> NSImage? {
-        guard CGPreflightScreenCaptureAccess(),
-              let content = try? await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false) else { return nil }
-        let windows = content.windows.filter {
-            $0.owningApplication?.processID == pid && $0.windowLayer == 0 && $0.frame.width > 100 && $0.frame.height > 100
+    static func windows(_ ids: [CGWindowID], each: (CGWindowID, NSImage) -> Void) async {
+        guard !ids.isEmpty, CGPreflightScreenCaptureAccess(),
+              let content = try? await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false) else { return }
+        for id in ids {
+            guard let w = content.windows.first(where: { $0.windowID == id }) else { continue }
+            let c = SCStreamConfiguration()
+            c.width = 360
+            c.height = max(Int(360 * w.frame.height / max(w.frame.width, 1)), 1)
+            c.showsCursor = false
+            if let cg = try? await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: w), configuration: c) {
+                each(id, NSImage(cgImage: cg, size: .zero))
+            }
         }
-        // The window list from CoreGraphics is in front-to-back order, so its first match is the front window.
-        let onScreen = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
-        let frontID = onScreen.first {
-            ($0[kCGWindowOwnerPID as String] as? pid_t) == pid && ($0[kCGWindowLayer as String] as? Int) == 0
-        }?[kCGWindowNumber as String] as? CGWindowID
-        guard let w = windows.first(where: { $0.windowID == frontID })
-                ?? windows.max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }) else { return nil }
-        let c = SCStreamConfiguration()
-        c.width = 640
-        c.height = max(Int(640 * w.frame.height / w.frame.width), 1)
-        c.showsCursor = false
-        guard let cg = try? await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: w), configuration: c)
-        else { return nil }
-        return NSImage(cgImage: cg, size: .zero)
     }
 }

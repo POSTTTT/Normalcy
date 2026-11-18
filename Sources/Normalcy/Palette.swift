@@ -16,19 +16,34 @@ struct AppItem: Equatable {
     var level: Float? // "vol out": the device's volume, 0-1; nil when it has none
 }
 
+// A window in the "b " grid. id 0 stands for a running app with no window open.
+struct WindowItem: Equatable {
+    var id: CGWindowID = 0
+    var pid: pid_t
+    var app: String
+    var title = ""
+    var icon: NSImage?
+    var space = 0 // space ID; 0 for an app with no window
+    var group: String // section it's listed under: "Desktop 2", "Full Screen", "No Windows"
+    var hidden = false // an app hidden with Cmd+H
+}
+
 final class Palette: ObservableObject {
     // The highlight goes back to the top only when the text really changes: the text field
     // also writes back the same value when the view redraws (e.g. a preview arriving).
     // Any change also gives mo the whole screen again: keys inside mo never change the text.
-    @Published var text = "" { didSet { if text != oldValue { selected = 0; pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1); updateHints() } } }
+    @Published var text = "" { didSet { if text != oldValue { selected = initialSelection; pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1); updateHints() } } }
     var live: (Command) -> Void = { _ in }
     @Published var apps: [AppItem] = [] // running apps, by name; refreshed when the bar opens
     var installed: [AppItem] = [] // apps in the Applications folders, by name
     var outputs: [AppItem] = [] // sound output devices, for "vol out"; refreshed when the bar opens
     var volumeInfo: (String?) -> VolumeInfo? = App.volumeInfo
     var currentOutput: (String?) -> String? = App.currentOutput // the Mac's, or that app's
-    @Published var appPreviews: [pid_t: NSImage] = [:] // pid -> picture of its front window
-    var loadPreview: (pid_t) -> Void = { _ in } // runs a command right away, bar staying open
+    @Published var windows: [WindowItem] = [] // every window on every desktop, for "b "; refreshed when the bar opens
+    @Published var windowShots: [CGWindowID: NSImage] = [:] // window -> its picture, taken when the grid shows
+    var loadShots: ([CGWindowID]) -> Void = { _ in }
+    var pickWindow: (WindowItem) -> Void = { _ in }
+    var previousWindow: CGWindowID? // the one used before the front one; "b " starts on it, like Cmd+Tab
     @Published var selected = 0
     @Published var focusToken = 0 // bumped on every show to refocus the field
     @Published var visible = false // drives the entrance; reset while hidden so each open animates
@@ -316,7 +331,7 @@ final class Palette: ObservableObject {
     // text plus the key starts another trigger. Returns false when the key should be typed as usual.
     func typeDirection(_ key: String) -> Bool {
         let defs = defs()
-        if scrollKey(key) || tabKey(key) || arrowKey(key) || pointerKey(key) || volumeKey(key) { return true }
+        if scrollKey(key) || tabKey(key) || arrowKey(key) || pointerKey(key) || volumeKey(key) || gridKey(key) { return true }
         guard let head = defs.first(where: { $0.enabled && $0.trigger == text }).flatMap({ Action(rawValue: $0.id) }) else { return false }
         // mo and ms may have their own direction keys.
         if head == .hints { return false } // "cl" + h would click label h at once
@@ -373,7 +388,6 @@ final class Palette: ObservableObject {
         let pool: [AppItem]
         let id = Command.lookup(String(s[..<sp]), in: defs())?.id
         switch id {
-        case Action.focus.rawValue: pool = apps
         case Action.open.rawValue: pool = installed
         case Action.volume.rawValue:
             let rest = s[s.index(after: sp)...].trimmingCharacters(in: .whitespaces)
@@ -390,13 +404,59 @@ final class Palette: ObservableObject {
         default: return nil
         }
         let q = s[s.index(after: sp)...].trimmingCharacters(in: .whitespaces).lowercased()
-        // "b h": a direction key switches windows, so no app list.
-        if id == Action.focus.rawValue, Command.direction(q, in: defs()) != nil { return nil }
         return pool.filter { q.isEmpty || $0.name.lowercased().hasPrefix(q) }
     }
 
+    // After the switch command and a space ("b ", "b saf"): every window on every desktop whose
+    // app name starts with what's typed, or whose title has it.
+    var windowMatches: [WindowItem]? {
+        let s = text.drop { $0 == " " }
+        guard let sp = s.firstIndex(of: " "),
+              Command.lookup(String(s[..<sp]), in: defs())?.id == Action.focus.rawValue else { return nil }
+        let q = s[s.index(after: sp)...].trimmingCharacters(in: .whitespaces).lowercased()
+        if Command.direction(q, in: defs()) != nil { return nil } // "b h": the nearest window that way
+        return windows.filter { q.isEmpty || $0.app.lowercased().hasPrefix(q) || $0.title.lowercased().contains(q) }
+    }
+
+    // Where the highlight starts: on the previous window once "b " is typed, before any name;
+    // otherwise the top.
+    var initialSelection: Int {
+        guard text.split(separator: " ").count == 1, let list = windowMatches else { return 0 }
+        return list.firstIndex { $0.id == previousWindow } ?? 0
+    }
+
+    static let gridColumns = 3
+    // The window grid's rows, as indexes into the list: three across, each group on new rows.
+    static func gridRows(_ list: [WindowItem]) -> [[Int]] {
+        var rows: [[Int]] = []
+        for i in list.indices {
+            if i == 0 || list[i].group != list[i - 1].group || rows[rows.count - 1].count == gridColumns {
+                rows.append([i])
+            } else {
+                rows[rows.count - 1].append(i)
+            }
+        }
+        return rows
+    }
+
+    // In the window grid, direction keys move the highlight and are never typed: arrows always,
+    // h j k l only before a name is typed ("b " + l, while "b" + l is still the nearest window).
+    func gridKey(_ key: String) -> Bool {
+        guard let list = windowMatches, !list.isEmpty, let dir = Command.direction(key, in: defs()),
+              Command.arrowAction(key) != nil || text.split(separator: " ").count == 1 else { return false }
+        let rows = Self.gridRows(list)
+        let r = rows.firstIndex { $0.contains(selected) } ?? 0, c = rows[r].firstIndex(of: selected) ?? 0
+        switch dir {
+        case .left: selected = max(selected - 1, 0)
+        case .right: selected = min(selected + 1, list.count - 1)
+        case .top: if r > 0 { selected = rows[r - 1][min(c, rows[r - 1].count - 1)] }
+        default: if r + 1 < rows.count { selected = rows[r + 1][min(c, rows[r + 1].count - 1)] }
+        }
+        return true
+    }
+
     func move(_ by: Int) {
-        let n = appMatches?.count ?? matches.count
+        let n = windowMatches?.count ?? appMatches?.count ?? matches.count
         if n > 0 { selected = (selected + by + n) % n }
     }
 
@@ -414,6 +474,8 @@ final class Palette: ObservableObject {
         // Return in tab, arrow or volume mode just closes the bar: the keys already did their work.
         if !continuing, tabMode || arrowMode || volumeMode != nil { return cancel() }
         defer { pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1) } // the next "mo " starts from the whole screen
+        // Picking from the window grid brings that window forward.
+        if let list = windowMatches, list.indices.contains(selected) { return pickWindow(list[selected]) }
         // Picking from the app list switches to the highlighted app.
         if let list = appMatches, list.indices.contains(selected), let head = text.split(separator: " ").first {
             // "vol [app] out": everything up to "out" stays.
@@ -544,11 +606,12 @@ struct PaletteView: View {
             volumeMeter(v)
                 .transition(.opacity.combined(with: .scale(scale: 0.97)))
         }
-        if let apps = model.appMatches {
-            if apps.indices.contains(model.selected), apps[model.selected].pid != 0 { // running apps only
-                appPreview(apps[model.selected])
+        if let wins = model.windowMatches {
+            if !wins.isEmpty {
+                windowGrid(wins)
                     .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
+        } else if let apps = model.appMatches {
             if !apps.isEmpty {
                 // Up to 8 rows tall; scrolls to keep the highlight in view.
                 ScrollViewReader { scroll in
@@ -785,23 +848,73 @@ struct PaletteView: View {
         }
     }
 
-    // The highlighted app's front window, captured when it's highlighted; its icon until then
-    // (or when it has no window, or Screen Recording isn't allowed).
-    func appPreview(_ app: AppItem) -> some View {
-        Group {
-            if let img = model.appPreviews[app.pid] {
-                Image(nsImage: img).resizable().aspectRatio(contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
-            } else if let icon = app.icon {
-                Image(nsImage: icon).resizable().frame(width: 96, height: 96)
+    // "b ": every window as a picture, under its desktop. Up to about three rows tall; scrolls
+    // to keep the highlight in view. Pictures arrive as they're taken; the app icon until then
+    // (or without Screen Recording).
+    func windowGrid(_ wins: [WindowItem]) -> some View {
+        let rows = Palette.gridRows(wins)
+        let starts = rows.indices.filter { $0 == 0 || wins[rows[$0][0]].group != wins[rows[$0 - 1][0]].group }
+        return ScrollViewReader { scroll in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(rows.indices, id: \.self) { r in
+                        if starts.contains(r) { sectionHeader(wins[rows[r][0]].group, first: r == 0) }
+                        HStack(spacing: 4) {
+                            ForEach(rows[r], id: \.self) { i in
+                                windowTile(wins[i], selected: i == model.selected)
+                                    .id(i)
+                                    .onTapGesture { model.selected = i; model.enter() }
+                            }
+                        }
+                        .frame(maxWidth: .infinity) // a short row sits in the middle
+                    }
+                }
+            }
+            .scrollIndicators(.never)
+            .frame(height: min(CGFloat(rows.count) * 146 + CGFloat(starts.count) * 26, 480))
+            .onChange(of: model.selected) { scroll.scrollTo(model.selected) }
+        }
+        .padding(8)
+        .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .animation(motion(0.18) ?? .linear(duration: 0.1), value: wins.map(\.id))
+        .animation(motion(0.15), value: model.selected)
+        .task(id: wins.map(\.id)) { model.loadShots(wins.map(\.id).filter { $0 != 0 && model.windowShots[$0] == nil }) }
+    }
+
+    func windowTile(_ w: WindowItem, selected: Bool) -> some View {
+        let shot = model.windowShots[w.id]
+        let note = w.hidden ? "Hidden" : w.id == 0 ? "No open window" : w.title.isEmpty ? "" : w.app
+        return VStack(spacing: 2) {
+            ZStack(alignment: .bottomLeading) {
+                if let shot {
+                    Image(nsImage: shot).resizable().aspectRatio(contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .shadow(color: .black.opacity(0.25), radius: 4, y: 1)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if let icon = w.icon { Image(nsImage: icon).resizable().frame(width: 24, height: 24) }
+                } else if let icon = w.icon {
+                    Image(nsImage: icon).resizable().frame(width: 48, height: 48)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .frame(height: 90)
+            .padding(.bottom, 4)
+            Text(w.title.isEmpty ? w.app : w.title).font(.system(size: 12, weight: .medium)).lineLimit(1)
+            Text(note.isEmpty ? " " : note).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+        }
+        .padding(8)
+        .frame(width: 176, height: 142)
+        .background {
+            if selected {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.primary.opacity(0.1))
+                    .matchedGeometryEffect(id: "selection", in: selection)
             }
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 220)
-        .padding(14)
-        .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .task(id: app.pid) { model.loadPreview(app.pid) }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([w.title.isEmpty ? w.app : w.title, note, w.group].filter { !$0.isEmpty }.joined(separator: ", "))
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     func volumeMeter(_ v: VolumeInfo) -> some View {

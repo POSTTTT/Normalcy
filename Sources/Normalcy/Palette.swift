@@ -16,16 +16,15 @@ struct AppItem: Equatable {
     var level: Float? // "vol out": the device's volume, 0-1; nil when it has none
 }
 
-// A window in the "b " grid. id 0 stands for a running app with no window open.
+// A window in the "b " grid.
 struct WindowItem: Equatable {
-    var id: CGWindowID = 0
+    var id: CGWindowID
     var pid: pid_t
     var app: String
     var title = ""
     var icon: NSImage?
-    var space = 0 // space ID; 0 for an app with no window
-    var group: String // section it's listed under: "Desktop 2", "Full Screen", "No Windows"
-    var hidden = false // an app hidden with Cmd+H
+    var space = 0 // space ID
+    var group: String // section it's listed under: "Desktop 2", "Full Screen"
 }
 
 final class Palette: ObservableObject {
@@ -919,12 +918,12 @@ struct PaletteView: View {
         .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .animation(motion(0.18) ?? .linear(duration: 0.1), value: wins.map(\.id))
         .animation(motion(0.15), value: model.selected)
-        .task(id: wins.map(\.id)) { if store.windowPreviews { model.loadShots(wins.map(\.id).filter { $0 != 0 && model.windowShots[$0] == nil }) } }
+        .task(id: wins.map(\.id)) { if store.windowPreviews { model.loadShots(wins.map(\.id).filter { model.windowShots[$0] == nil }) } }
     }
 
     func windowTile(_ w: WindowItem, selected: Bool) -> some View {
         let shot = store.windowPreviews ? model.windowShots[w.id] : nil // off: the app icon
-        let note = w.hidden ? "Hidden" : w.id == 0 ? "No open window" : w.title.isEmpty ? "" : w.app
+        let note = w.title.isEmpty ? "" : w.app
         return VStack(spacing: 2) {
             ZStack(alignment: .bottomLeading) {
                 if let shot {

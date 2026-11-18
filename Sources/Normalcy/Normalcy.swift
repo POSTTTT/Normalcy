@@ -678,8 +678,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             .sorted { (rank($0.pid), $0.name.lowercased()) < (rank($1.pid), $1.name.lowercased()) }
     }
 
-    // Every window for "b ", under its desktop in order, then full-screen apps, then running apps
-    // with no window open. Front to back within a desktop. Windows on other desktops are listed
+    // Every window for "b ", under its desktop in order, then full-screen apps. Front to back
+    // within a desktop. Windows on other desktops are listed
     // only once seen on screen, since apps' kept-around closed windows look just like them.
     func windowItems() -> [WindowItem] {
         let desks = Desktops.read()
@@ -695,10 +695,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 out.append(WindowItem(id: w.id, pid: w.pid, app: app.localizedName ?? "", title: w.title, icon: app.icon, space: space, group: group))
             }
         }
-        let withWindow = Set(out.map(\.pid))
-        return out + apps.filter { !withWindow.contains($0.processIdentifier) }
-            .sorted { ($0.localizedName ?? "").lowercased() < ($1.localizedName ?? "").lowercased() }
-            .map { WindowItem(pid: $0.processIdentifier, app: $0.localizedName ?? "", icon: $0.icon, group: "No Windows", hidden: $0.isHidden) }
+        return out
     }
 
     // The window used before the one in front: the second one on this desktop, front to back,
@@ -716,7 +713,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func focus(_ w: WindowItem) {
         guard let app = NSRunningApplication(processIdentifier: w.pid) else { return NSSound.beep() }
         let raise = { [weak self] in
-            if w.id != 0, let ax = self?.axWindow(w.pid, id: w.id) {
+            if let ax = self?.axWindow(w.pid, id: w.id) {
                 AXUIElementSetAttributeValue(ax, kAXMainAttribute as CFString, kCFBooleanTrue)
                 AXUIElementPerformAction(ax, kAXRaiseAction as CFString)
             }
@@ -1885,7 +1882,7 @@ enum Main {
         ap.windows = [WindowItem(id: 1, pid: 1, app: "Discord", group: "Desktop 1"),
                       WindowItem(id: 2, pid: 2, app: "Safari", title: "Apple", group: "Desktop 1"),
                       WindowItem(id: 3, pid: 2, app: "Safari", title: "GitHub", group: "Desktop 2"),
-                      WindowItem(pid: 3, app: "Slack", group: "No Windows")]
+                      WindowItem(id: 4, pid: 3, app: "Slack", group: "Full Screen")]
         var picked: String?, pickedWindow: CGWindowID?
         ap.submit = { picked = $0 }
         ap.pickWindow = { pickedWindow = $0.id }

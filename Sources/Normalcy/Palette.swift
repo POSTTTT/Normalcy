@@ -732,7 +732,12 @@ struct PaletteView: View {
     // plus an empty block for the next word. New blocks pop in.
     // shortcut: long input runs past the panel edge; wrap if that becomes a problem.
     var keys: some View {
-        let blocks = Palette.keyBlocks(model.text, showSpaces: store.showSpaces)
+        var blocks = Palette.keyBlocks(model.text, showSpaces: store.showSpaces)
+        // While a strip, grid or list shows what to pick, the empty block waiting for the next
+        // word says nothing; it stays when it holds the options.
+        let choosing = model.text.contains(" ") && (model.windowMatches != nil || model.appMatches?.isEmpty == false
+            || model.desktopCommand != nil && model.desktops.count > 0)
+        if choosing, blocks.count > 1, blocks.last == "", !(store.showHints && model.argPlaceholder != nil) { blocks.removeLast() }
         return HStack(spacing: 8) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { i, word in
                 let hint = store.showHints && i == blocks.count - 1 ? model.argPlaceholder : nil // off: an empty cap

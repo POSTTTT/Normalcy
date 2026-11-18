@@ -391,6 +391,9 @@ final class Store: ObservableObject {
     @Published var volumeKeys = UserDefaults.standard.string(forKey: "volumeKeys") ?? "" { // down, up after vol; "" = the window keys
         didSet { UserDefaults.standard.set(volumeKeys, forKey: "volumeKeys") }
     }
+    @Published var showHints = UserDefaults.standard.object(forKey: "showHints") as? Bool ?? true { // the options beside the key caps
+        didSet { UserDefaults.standard.set(showHints, forKey: "showHints") }
+    }
     @Published var hintsVertical = UserDefaults.standard.object(forKey: "hintsVertical") as? Bool ?? true { // argument options stacked
         didSet { UserDefaults.standard.set(hintsVertical, forKey: "hintsVertical") }
     }
@@ -556,8 +559,8 @@ struct GeneralSettings: View {
                 }
                 if store.style == .minimal || store.style == .glow && store.glowKeys {
                     Toggle("Space as a key", isOn: $store.showSpaces)
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Options")
+                    Toggle("Options", isOn: $store.showHints)
+                    if store.showHints {
                         ChoiceCards(selection: $store.hintsVertical, choices: [
                             (true, "Vertical", AnyView(StylePicture.hint(vertical: true))),
                             (false, "Horizontal", AnyView(StylePicture.hint(vertical: false))),

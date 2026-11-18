@@ -1673,6 +1673,7 @@ enum Main {
         dm.defs = { d }
         var switched: [Command] = []
         dm.live = { switched.append($0) }
+        dm.desktopInstant = { true } // not whatever Settings holds
         dm.text = "d"
         precondition(dm.typeDirection("l") && dm.text == "d " && switched == [.ctrlKey(124)])
         dm.typeArrow("←")

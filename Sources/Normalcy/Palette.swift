@@ -735,7 +735,7 @@ struct PaletteView: View {
         let blocks = Palette.keyBlocks(model.text, showSpaces: store.showSpaces)
         return HStack(spacing: 8) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { i, word in
-                let hint = i == blocks.count - 1 ? model.argPlaceholder : nil
+                let hint = store.showHints && i == blocks.count - 1 ? model.argPlaceholder : nil // off: an empty cap
                 let stacked = store.hintsVertical && hint?.contains("\n") == true
                 Text(hint.map { stacked ? $0 : $0.replacingOccurrences(of: "\n", with: " · ") } ?? Palette.spacedArrows(word))
                     .font(hint == nil ? .system(size: 22, weight: .medium, design: .monospaced) : .system(size: stacked ? 14 : 17))

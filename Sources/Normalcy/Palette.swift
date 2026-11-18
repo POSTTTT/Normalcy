@@ -32,7 +32,7 @@ final class Palette: ObservableObject {
     // The highlight goes back to the top only when the text really changes: the text field
     // also writes back the same value when the view redraws (e.g. a preview arriving).
     // Any change also gives mo the whole screen again: keys inside mo never change the text.
-    @Published var text = "" { didSet { if text != oldValue { selected = initialSelection; pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1); updateHints() } } }
+    @Published var text = "" { didSet { if text != oldValue { selected = initialSelection; desktopPick = nil; pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1); updateHints() } } }
     var live: (Command) -> Void = { _ in }
     @Published var apps: [AppItem] = [] // running apps, by name; refreshed when the bar opens
     var installed: [AppItem] = [] // apps in the Applications folders, by name
@@ -52,6 +52,8 @@ final class Palette: ObservableObject {
     var cancel: () -> Void = {}
     var defs: () -> [CommandDef] = { Store.shared.defs }
     @Published var desktops = Desktops()
+    @Published var desktopPick: Int? // "d " when picking first: the desktop left / right have moved to, 1-based
+    var desktopInstant: () -> Bool = { Store.shared.desktopInstant }
     @Published var thumbs: [Int: NSImage] = [:] // space ID -> last snapshot
     @Published var wallpaper: NSImage? // stand-in for desktops not yet snapshotted
     var window: CGRect? // target window and screen, AX coordinates, captured when the bar opens
@@ -100,6 +102,7 @@ final class Palette: ObservableObject {
     }
 
     var desktopTarget: Int? {
+        if desktopMode, let p = desktopPick { return p }
         let parts = text.split(separator: " ")
         guard parts.count > 1 else { return nil }
         if let n = Int(parts[1]) { return n }
@@ -207,6 +210,24 @@ final class Palette: ObservableObject {
     func tabKey(_ key: String) -> Bool {
         guard tabMode, let dir = Command.direction(key, in: defs()), dir == .left || dir == .right else { return false }
         live(.switchTab(next: dir == .right))
+        return true
+    }
+
+    // Desktop mode: once "d " is typed, left / right go to the desktop that way right away and
+    // are never typed, like tab mode. Numbers are still typed: "d 2". Set to pick first, they move
+    // the highlight in the desktop strip instead, and Return goes there.
+    var desktopMode: Bool {
+        let words = text.split(separator: " ")
+        return words.count == 1 && text.hasSuffix(" ") && Command.lookup(String(words[0]), in: defs())?.id == Action.desktop.rawValue
+    }
+
+    func desktopKey(_ key: String) -> Bool {
+        guard desktopMode, Command.direction(key, in: defs()) != nil, let k = Command.desktopKey(key, defs()) else { return false }
+        if desktopInstant() {
+            live(.ctrlKey(k))
+        } else if let from = desktopPick ?? desktops.current {
+            desktopPick = min(max(from + (k == 124 ? 1 : -1), 1), max(desktops.count, 1))
+        }
         return true
     }
 
@@ -331,7 +352,7 @@ final class Palette: ObservableObject {
     // text plus the key starts another trigger. Returns false when the key should be typed as usual.
     func typeDirection(_ key: String) -> Bool {
         let defs = defs()
-        if scrollKey(key) || tabKey(key) || arrowKey(key) || pointerKey(key) || volumeKey(key) || gridKey(key) { return true }
+        if scrollKey(key) || tabKey(key) || desktopKey(key) || arrowKey(key) || pointerKey(key) || volumeKey(key) || gridKey(key) { return true }
         guard let head = defs.first(where: { $0.enabled && $0.trigger == text }).flatMap({ Action(rawValue: $0.id) }) else { return false }
         // mo and ms may have their own direction keys.
         if head == .hints { return false } // "cl" + h would click label h at once
@@ -339,7 +360,7 @@ final class Palette: ObservableObject {
             : head == .volume ? volumeStep(key) != nil : Command.direction(key, in: defs) != nil
         guard isDirection, head.argHint != nil, !defs.contains(where: { $0.enabled && $0.trigger.hasPrefix(text + key) }) else { return false }
         text += " "
-        if !scrollKey(key), !tabKey(key), !arrowKey(key), !pointerKey(key), !volumeKey(key) { text += key }
+        if !scrollKey(key), !tabKey(key), !desktopKey(key), !arrowKey(key), !pointerKey(key), !volumeKey(key) { text += key }
         return true
     }
 
@@ -472,7 +493,8 @@ final class Palette: ObservableObject {
             if text != filled { text = filled; return }
         }
         // Return in tab, arrow or volume mode just closes the bar: the keys already did their work.
-        if !continuing, tabMode || arrowMode || volumeMode != nil { return cancel() }
+        if desktopMode, let n = desktopPick { return run(text + String(n)) } // picked with left / right
+        if !continuing, tabMode || desktopMode || arrowMode || volumeMode != nil { return cancel() }
         defer { pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1) } // the next "mo " starts from the whole screen
         // Picking from the window grid brings that window forward.
         if let list = windowMatches, list.indices.contains(selected) { return pickWindow(list[selected]) }

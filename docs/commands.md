@@ -24,7 +24,7 @@ then `h` gives `d h`.
 
 | Trigger | Command | Input | What it does |
 | --- | --- | --- | --- |
-| `d` | Go to Desktop | `1`–`9`, `h` or `l` | Goes to that desktop, or the one to the left or right: `d 2`, `d l` |
+| `d` | Go to Desktop | `1`–`9`, or `h` `l` as you press them | Goes to that desktop: `d 2`. Then `l` / → goes one desktop right and `h` / ← one left, as you press them, with the bar staying up. Return or Esc closes the bar. Set Settings › Commands › Desktops & Tabs to *Pick, then Return* and `h` `l` move the highlight in the desktop strip instead; Return goes there |
 | `m` | Move Window to Desktop | `1`–`9`, `h` or `l` | Takes the front window to that desktop: `m 3`, `m h` |
 | `t` | Move Tab to New Window | optional: a window position | Moves the current tab out into its own window. Add a position to place it: `t h` (left half), `t l3`, `t hk`, `t f` |
 | `nt` | New Tab | none | Opens a new tab in the front app (presses Cmd+T) |

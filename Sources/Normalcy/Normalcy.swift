@@ -511,6 +511,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if case .pressKeys(let keys) = cmd, let pid = target?.processIdentifier {
                 return keys.forEach { self.pressKey($0.key, $0.flags, to: pid) }
             }
+            // d + left / right: the bar stays up for the next press, like Shift+Enter, and takes
+            // focus back once the switch lands.
+            if case .ctrlKey = cmd {
+                continuing = true
+                run(cmd)
+                return scheduleRefocus(after: 1.5)
+            }
             run(cmd)
         }
         // The front app's own shortcuts come first, so they win a trigger shared with a built-in.
@@ -1515,12 +1522,12 @@ enum Main {
         r.typeArrow("←")
         precondition(r.text == "t ←")
         precondition(Command.parse("t ←", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
-        r.text = "d "
+        r.text = "m "
         r.typeArrow("→")
-        precondition(r.text == "d →" && Command.parse("d →", d) == .ctrlKey(124))
+        precondition(r.text == "m →" && Command.parse("d →", d) == .ctrlKey(124)) // d's arrows go at once; see below
         // h j k l add the space too, unless they start another trigger.
-        r.text = "d"
-        precondition(r.typeDirection("h") && r.text == "d h")
+        r.text = "m"
+        precondition(r.typeDirection("h") && r.text == "m h")
         r.text = "t"
         precondition(r.typeDirection("h") && r.text == "t h" && !r.typeDirection("x"))
         r.text = "h"
@@ -1661,6 +1668,29 @@ enum Main {
         sp.typeArrow("↑")
         precondition(scrolled.last == .scroll(CGSize(width: 0, height: -1)) && scrolled.count == 3 && sp.text == "s ")
         precondition(!sp.scrollKey("x")) // other keys type as usual
+        // "d" + left / right goes to that desktop at once, the key never typed; numbers still are.
+        let dm = Palette()
+        dm.defs = { d }
+        var switched: [Command] = []
+        dm.live = { switched.append($0) }
+        dm.text = "d"
+        precondition(dm.typeDirection("l") && dm.text == "d " && switched == [.ctrlKey(124)])
+        dm.typeArrow("←")
+        precondition(switched.last == .ctrlKey(123) && dm.text == "d ")
+        precondition(!dm.desktopKey("2") && !dm.desktopKey("j"))
+        // Set to pick first: left / right move the highlight in the strip, Return goes there.
+        dm.desktopInstant = { false }
+        dm.desktops = Desktops(ids: [10, 20, 30], currentID: 20)
+        var went: String?
+        dm.submit = { went = $0 }
+        dm.text = "d"
+        precondition(dm.typeDirection("l") && dm.desktopTarget == 3 && switched.count == 2)
+        precondition(dm.typeDirection("l") && dm.desktopTarget == 3) // stops at the last
+        dm.typeArrow("←")
+        dm.typeArrow("←")
+        precondition(dm.desktopTarget == 1 && dm.text == "d ")
+        dm.enter()
+        precondition(went == "d 1")
         sp.text = "s"
         precondition(sp.typeDirection("j") && sp.text == "s " && scrolled.count == 4) // no space needed
         sp.text = "o "
@@ -1824,8 +1854,8 @@ enum Main {
         precondition(pt.pointerKey("w") && pt.pointerArea == CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5))
         precondition(!pt.pointerKey("l") && pt.pointerKey("→")) // arrows always work
         precondition(pt.pointerKey("S") && moved.last == .pointerBy(CGSize(width: 0, height: 10)))
-        pt.text = "d"
-        precondition(pt.typeDirection("h") && pt.text == "d h") // other commands keep the window keys
+        pt.text = "m"
+        precondition(pt.typeDirection("h") && pt.text == "m h") // other commands keep the window keys
         pt.pointerKeys = { "" }
         // Resizes preview where the window will go.
         let rp = Palette()

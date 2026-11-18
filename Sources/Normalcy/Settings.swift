@@ -408,6 +408,9 @@ final class Store: ObservableObject {
     @Published var growPercent = UserDefaults.standard.object(forKey: "growPercent") as? Int ?? 10 {
         didSet { UserDefaults.standard.set(growPercent, forKey: "growPercent") }
     }
+    @Published var desktopInstant = UserDefaults.standard.object(forKey: "desktopInstant") as? Bool ?? true { // d + left / right: go at once, or pick then Return
+        didSet { UserDefaults.standard.set(desktopInstant, forKey: "desktopInstant") }
+    }
     @Published var windowPreviews = UserDefaults.standard.object(forKey: "windowPreviews") as? Bool ?? true { // b's window pictures
         didSet { UserDefaults.standard.set(windowPreviews, forKey: "windowPreviews") }
     }
@@ -660,8 +663,16 @@ struct CommandSettings: View {
     var body: some View {
         CommandGroups(groups: ["Apps", "Desktops & Tabs", "Edit", "Scroll", "Pointer", "Sound", "Other"],
                       note: "Click a key cap to change it.",
-                      options: ["Pointer": GroupOptions(rows: AnyView(pointerOptions), note: "Uppercase: 10 points."),
+                      options: ["Desktops & Tabs": GroupOptions(rows: AnyView(desktopOptions)),
+                                "Pointer": GroupOptions(rows: AnyView(pointerOptions), note: "Uppercase: 10 points."),
                                 "Sound": GroupOptions(rows: AnyView(soundOptions), note: "5% per press.")])
+    }
+
+    @ViewBuilder var desktopOptions: some View {
+        Picker("d left / right", selection: $store.desktopInstant) {
+            Text("Switch as you press").tag(true)
+            Text("Pick, then Return").tag(false)
+        }
     }
 
     @ViewBuilder var pointerOptions: some View {

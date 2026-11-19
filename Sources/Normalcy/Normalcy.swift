@@ -1059,15 +1059,70 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             .post(tap: .cghidEventTap)
     }
 
-    // shortcut: assumes empty title bar just right of the green button; apps with custom
-    // toolbars there (e.g. a sidebar button) won't drag. Upgrade: probe with AXUIElementCopyElementAtPosition.
+    // Where to grab the window: the middle of the widest stretch of its title row with nothing
+    // clickable in it. Apps drawing their own title bar (Claude, other Electron apps) put buttons
+    // right of the green one; their drag area is the empty part.
+    // shortcut: a stretch with nothing clickable is taken as draggable; a web app that marks empty
+    // space no-drag won't move. Upgrade: try the next widest stretch if the window didn't follow.
     func titleBarPoint(_ w: AXUIElement) -> CGPoint? {
+        guard let wf = axFrame(w) else { return nil }
         var zoom: CFTypeRef?
+        let start: CGPoint
         if AXUIElementCopyAttributeValue(w, kAXZoomButtonAttribute as CFString, &zoom) == .success,
            let zoom, let f = axFrame(zoom as! AXUIElement) {
-            return CGPoint(x: f.maxX + 8, y: f.midY)
+            start = CGPoint(x: f.maxX + 8, y: f.midY)
+        } else {
+            start = CGPoint(x: wf.minX + 90, y: wf.minY + 12)
         }
-        return axFrame(w).map { CGPoint(x: $0.minX + 90, y: $0.minY + 12) }
+        func clickable(_ e: AXUIElement) -> Bool {
+            var role: CFTypeRef?, acts: CFArray?
+            AXUIElementCopyAttributeValue(e, kAXRoleAttribute as CFString, &role)
+            AXUIElementCopyActionNames(e, &acts)
+            return Self.clickableRoles.contains(role as? String ?? "") || ((acts as? [String])?.contains("AXPress") ?? false)
+        }
+        // Safari's toolbar buttons hit-test as the bare window, so also block the frames of
+        // clickable things near the top of the window's tree.
+        var blocked: [CGRect] = []
+        func walk(_ e: AXUIElement, _ depth: Int) {
+            var kids: CFTypeRef?
+            AXUIElementCopyAttributeValue(e, kAXChildrenAttribute as CFString, &kids)
+            for k in kids as? [AXUIElement] ?? [] {
+                guard let f = axFrame(k), f.minY <= start.y, f.maxY >= start.y else { continue }
+                if clickable(k) { blocked.append(f) } else if depth < 3 { walk(k, depth + 1) }
+            }
+        }
+        walk(w, 0)
+        var pid: pid_t = 0
+        AXUIElementGetPid(w, &pid)
+        let sys = AXUIElementCreateSystemWide()
+        let xs = Array(stride(from: start.x, to: wf.maxX - 8, by: 8))
+        let free = xs.map { x -> Bool in
+            guard !blocked.contains(where: { $0.minX <= x && x <= $0.maxX }) else { return false }
+            var hit: AXUIElement?, elPid: pid_t = 0
+            guard AXUIElementCopyElementAtPosition(sys, Float(x), Float(start.y), &hit) == .success, var el = hit,
+                  AXUIElementGetPid(el, &elPid) == .success, elPid == pid else { return false }
+            // A tab's icon or title isn't clickable itself; the tab around it is.
+            for _ in 0..<5 {
+                if clickable(el) { return false }
+                var parent: CFTypeRef?
+                guard AXUIElementCopyAttributeValue(el, kAXParentAttribute as CFString, &parent) == .success,
+                      let p = parent, CFGetTypeID(p) == AXUIElementGetTypeID() else { break }
+                el = p as! AXUIElement
+            }
+            return true
+        }
+        return Self.widestRunMiddle(xs, free).map { CGPoint(x: $0, y: start.y) } ?? start
+    }
+
+    // Middle x of the longest run of true in free, nil if none.
+    static func widestRunMiddle(_ xs: [CGFloat], _ free: [Bool]) -> CGFloat? {
+        var best: Range<Int>?, from: Int?
+        for i in 0...free.count {
+            if i < free.count, free[i] { from = from ?? i; continue }
+            if let f = from, (f..<i).count > (best?.count ?? 0) { best = f..<i }
+            from = nil
+        }
+        return best.map { (xs[$0.lowerBound] + xs[$0.upperBound - 1]) / 2 }
     }
 
     func axFrame(_ e: AXUIElement) -> CGRect? {
@@ -1399,6 +1454,8 @@ enum Main {
         precondition(Command.parse("vol h", d) == nil) // left and right don't change it; "h" is an app name
         precondition(Command.parse("vol safari out air", d) == .volume(app: "safari", .output("air")))
         precondition(Command.parse("vol safari", d) == nil)
+        precondition(App.widestRunMiddle([0, 8, 16, 24, 32, 40], [true, false, true, true, true, false]) == 24)
+        precondition(App.widestRunMiddle([0, 8], [false, false]) == nil && App.widestRunMiddle([0, 8], [true, true]) == 4)
         var broken = d
         broken[broken.firstIndex { $0.id == "left" }!].trigger = " "
         broken[broken.firstIndex { $0.id == "leftThird" }!].trigger = "  "

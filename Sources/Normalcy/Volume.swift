@@ -29,13 +29,15 @@ enum Volume {
 
     static func get<T>(_ obj: AudioObjectID, _ sel: AudioObjectPropertySelector, _ scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal, _ value: T) -> T? {
         var a = address(sel, scope), v = value, size = UInt32(MemoryLayout<T>.size)
-        return AudioObjectGetPropertyData(obj, &a, 0, nil, &size, &v) == noErr ? v : nil
+        // Plain values only (numbers, IDs): the bytes are filled in as-is.
+        let ok = withUnsafeMutableBytes(of: &v) { AudioObjectGetPropertyData(obj, &a, 0, nil, &size, $0.baseAddress!) }
+        return ok == noErr ? v : nil
     }
 
     @discardableResult
     static func set<T>(_ obj: AudioObjectID, _ sel: AudioObjectPropertySelector, _ scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal, _ value: T) -> Bool {
         var a = address(sel, scope), v = value
-        return AudioObjectSetPropertyData(obj, &a, 0, nil, UInt32(MemoryLayout<T>.size), &v) == noErr
+        return withUnsafeBytes(of: &v) { AudioObjectSetPropertyData(obj, &a, 0, nil, UInt32(MemoryLayout<T>.size), $0.baseAddress!) } == noErr
     }
 
     static func string(_ obj: AudioObjectID, _ sel: AudioObjectPropertySelector) -> String? {

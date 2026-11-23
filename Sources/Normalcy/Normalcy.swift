@@ -508,7 +508,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let fromBar = panel.isVisible // not `--run` from a script
             hide()
             guard let cmd else { return NSSound.beep() }
-            let placed = focusedWindow().flatMap { w -> CGWindowID? in
+            let placedAX = focusedWindow()
+            let placed = placedAX.flatMap { w -> CGWindowID? in
                 var id: CGWindowID = 0
                 return _AXUIElementGetWindow(w, &id) == .success ? id : nil
             }
@@ -517,8 +518,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if fromBar, case .layout(let f) = cmd {
                 fillAreas = Command.fillAreas(f)
                 fillTaken = Set([placed].compactMap { $0 })
-                // shortcut: fixed wait for the window to land before the bar comes back; lengthen if it flickers.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.offerFill() }
+                whenSettled(placedAX) { self.offerFill() }
             }
         }
         palette.submitContinuing = { [weak self] text in
@@ -592,7 +592,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // Quarters: on to the next empty one.
             if fill != nil {
                 fillTaken.insert(w.id)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.offerFill() }
+                whenSettled(axWindow(w.pid, id: w.id)) { self.offerFill() }
             }
         }
         panel.contentView = NSHostingView(rootView: PaletteView(model: palette))
@@ -680,6 +680,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.preview.order(.below, relativeTo: self.panel.windowNumber)
             self.palette.focusToken += 1
             withAnimation(.uiEaseOut(0.15)) { self.palette.visible = true }
+        }
+    }
+
+    // Runs `then` once the window has stopped moving. macOS animates tiling, and the bar taking
+    // focus mid-way stops the window short of its place. Gives up after about 1.5 s.
+    func whenSettled(_ w: AXUIElement?, last: CGRect? = nil, tries: Int = 26, then: @escaping () -> Void) {
+        // The first look waits 0.2 s, so a move that starts late isn't taken for one already done.
+        DispatchQueue.main.asyncAfter(deadline: .now() + (last == nil ? 0.2 : 0.05)) {
+            let now = w.flatMap(self.axFrame)
+            if now == nil || (last != nil && now == last) || tries == 0 { return then() }
+            self.whenSettled(w, last: now, tries: tries - 1, then: then)
         }
     }
 

@@ -706,6 +706,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         palette.previousWindow = here.first?.id
         palette.text = b + " "
         palette.fill = rest // after the text, whose change would clear it
+        // The bar moves into the space to fill, so the windows offered show where they'll go.
+        if let v = NSScreen.main?.visibleFrame {
+            let area = NSRect(x: v.minX + v.width * rest.minX, y: v.maxY - v.height * rest.maxY,
+                              width: v.width * rest.width, height: v.height * rest.height)
+            let w = min(600, area.width)
+            panel.setFrame(NSRect(x: area.midX - w / 2, y: area.minY, width: w, height: area.height), display: true)
+        }
     }
 
     // A window sits in that area: it covers most of it and little else, so a big window behind doesn't count.

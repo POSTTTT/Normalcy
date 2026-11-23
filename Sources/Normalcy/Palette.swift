@@ -544,7 +544,8 @@ struct PaletteView: View {
         let minimal = store.style == .minimal, island = store.style == .island, glow = store.style == .glow
         // The command bar style and the island always sit at the top; glow at the bottom, by its light;
         // minimal uses the chosen position.
-        let position = minimal ? store.position : glow ? .bottom : .top
+        // Picking a window to fill the space left: the bar sits in the middle of that space.
+        let position = model.fill != nil ? .center : minimal ? store.position : glow ? .bottom : .top
         let alignment: Alignment = switch position {
         case .top: .top
         case .center: .center

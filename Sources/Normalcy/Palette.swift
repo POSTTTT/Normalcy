@@ -371,9 +371,16 @@ final class Palette: ObservableObject {
     }
 
     // Arrow glyphs sit cramped in a monospaced font; put a gap beside each arrow inside a block.
+    // A key pressed three or more times in a row shows once with a count ("re kkkkkkk" as k×7),
+    // so the block doesn't stretch across the screen.
     static func spacedArrows(_ word: String) -> String {
-        var out = ""
+        var runs: [(Character, Int)] = []
         for ch in word {
+            if runs.last?.0 == ch { runs[runs.count - 1].1 += 1 } else { runs.append((ch, 1)) }
+        }
+        let shown = runs.map { $0.1 >= 3 ? "\($0.0)×\($0.1)" : String(repeating: $0.0, count: $0.1) }.joined()
+        var out = ""
+        for ch in shown {
             if let last = out.last,
                Command.arrowAction(String(ch)) != nil || Command.arrowAction(String(last)) != nil {
                 out.append("\u{2009}") // thin space

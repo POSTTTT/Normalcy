@@ -1695,6 +1695,8 @@ enum Main {
         precondition(Palette.keyBlocks("←↓", showSpaces: false) == ["←↓"])
         precondition(Palette.spacedArrows("←↓") == "←\u{2009}↓")
         precondition(Palette.spacedArrows("set") == "set")
+        precondition(Palette.spacedArrows("kkkkkkk") == "k×7" && Palette.spacedArrows("llj") == "llj")
+        precondition(Palette.spacedArrows("lllhhh") == "l×3h×3")
         // Arrow keys type h j k l, adding the space after a command that takes a direction.
         let r = Palette()
         r.defs = { d }

@@ -5,7 +5,8 @@ Every command, what it does and what you type after it.
 Press **Option+Space**, type the trigger, add the input if there is one, and press
 **Return**. **Shift+Return** runs it and keeps the bar open for the next command.
 
-Triggers below are the defaults. Rename any of them in Settings, and pick other
+Triggers below are the defaults. Rename any of them in Settings, or give one more
+names in the blank cap beside it (`full` beside `f`, say; separate several with spaces), and pick other
 direction keys in Settings › Windows (the window triggers follow). `h` `j` `k` `l`
 below stand for your left, down, up and right keys. The arrow keys always work as
 well.

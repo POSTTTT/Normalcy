@@ -105,14 +105,14 @@ enum Command: Equatable {
     // Enabled command for a typed word: its trigger, an arrow symbol, or two directions
     // in either order making a corner ("kh" = "hk" = ← ↑ = top-left quarter).
     static func lookup(_ word: String, in defs: [CommandDef]) -> CommandDef? {
-        if let d = defs.first(where: { $0.enabled && ($0.trigger == word || arrowAction(word)?.rawValue == $0.id) }) {
+        if let d = defs.first(where: { $0.enabled && ($0.names.contains(word) || arrowAction(word)?.rawValue == $0.id) }) {
             return d
         }
         // An arrow can stand in for its letter inside a trigger: "←3" = "h3" (left third).
         let spelled = word.map { ch in
             arrowAction(String(ch)).flatMap { a in defs.first { $0.id == a.rawValue }?.trigger } ?? String(ch)
         }.joined()
-        if spelled != word, let d = defs.first(where: { $0.enabled && $0.trigger == spelled }) { return d }
+        if spelled != word, let d = defs.first(where: { $0.enabled && $0.names.contains(spelled) }) { return d }
         guard word.count == 2 else { return nil }
         let corners: [Set<Action>: Action] = [
             [.left, .top]: .topLeft, [.right, .top]: .topRight, [.left, .bottom]: .bottomLeft, [.right, .bottom]: .bottomRight,
@@ -1581,6 +1581,10 @@ enum Main {
         precondition(Command.fillAreas(Command.layoutRect(.centerThird)!).count == 2)
         precondition(Command.fillAreas(Command.layoutRect(.leftTwoThirds)!).map { [$0.minX, $0.width].map { ($0 * 3).rounded() } } == [[2, 1]])
         precondition(Command.fillAreas(Command.layoutRect(.rightTwoThirds)!) == [Command.layoutRect(.leftThird)!])
+        var aka = d
+        aka[aka.firstIndex { $0.id == "full" }!].aliases = "full max"
+        precondition(Command.parse("full", aka) == .layout(Command.layoutRect(.full)!) && Command.parse("max", aka) == Command.parse("f", aka))
+        precondition(Command.parse("full", d) == nil)
         precondition(Command.parse("h23", d) == .layout(Command.layoutRect(.leftTwoThirds)!))
         precondition(Command.parse("←23", d) == .layout(Command.layoutRect(.leftTwoThirds)!))
         precondition(Command.fillAreas(Command.layoutRect(.topLeft)!) == [.topRight, .bottomLeft, .bottomRight].map { Command.layoutRect($0)! })

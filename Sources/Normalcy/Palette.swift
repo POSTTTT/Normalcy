@@ -125,11 +125,11 @@ final class Palette: ObservableObject {
             let isWindow = { (d: CommandDef) in Action(rawValue: d.id)?.isWindow == true }
             return defs.filter { !isWindow($0) } + defs.filter(isWindow)
         }
-        if s.contains(" ") { return defs.filter { $0.trigger == head } }
+        if s.contains(" ") { return defs.filter { $0.names.contains(head) } }
         let exact = Command.lookup(head, in: defs).map { [$0] } ?? []
-        let prefix = defs.filter { $0.trigger != head && $0.trigger.hasPrefix(head) && !exact.contains($0) }
-        let title = defs.filter {
-            !$0.trigger.hasPrefix(head) && !exact.contains($0) && $0.title.localizedCaseInsensitiveContains(head)
+        let prefix = defs.filter { d in !exact.contains(d) && d.names.contains { $0 != head && $0.hasPrefix(head) } }
+        let title = defs.filter { d in
+            !d.names.contains { $0.hasPrefix(head) } && !exact.contains(d) && d.title.localizedCaseInsensitiveContains(head)
         }
         return exact + prefix + title
     }
@@ -354,12 +354,12 @@ final class Palette: ObservableObject {
     func typeDirection(_ key: String) -> Bool {
         let defs = defs()
         if scrollKey(key) || tabKey(key) || desktopKey(key) || arrowKey(key) || pointerKey(key) || volumeKey(key) || gridKey(key) { return true }
-        guard let head = defs.first(where: { $0.enabled && $0.trigger == text }).flatMap({ Action(rawValue: $0.id) }) else { return false }
+        guard let head = defs.first(where: { $0.enabled && $0.names.contains(text) }).flatMap({ Action(rawValue: $0.id) }) else { return false }
         // mo and ms may have their own direction keys.
         if head == .hints { return false } // "cl" + h would click label h at once
         let isDirection = head == .pointer || head == .pointerStep ? pointerDirection(key) != nil
             : head == .volume ? volumeStep(key) != nil : Command.direction(key, in: defs) != nil
-        guard isDirection, head.argHint != nil, !defs.contains(where: { $0.enabled && $0.trigger.hasPrefix(text + key) }) else { return false }
+        guard isDirection, head.argHint != nil, !defs.contains(where: { $0.enabled && $0.names.contains { $0.hasPrefix(text + key) } }) else { return false }
         text += " "
         if !scrollKey(key), !tabKey(key), !desktopKey(key), !arrowKey(key), !pointerKey(key), !volumeKey(key) { text += key }
         return true

@@ -268,6 +268,10 @@ struct CommandDef: Codable, Identifiable, Equatable {
     var enabled = true
     var shortcut: HotKey? // app shortcuts only: the keys pressed in that app
     var name: String? // app shortcuts only, optional
+    var aliases: String? // other triggers for the same command, space-separated: "full" beside "f"
+
+    // The trigger, then any aliases: each one runs the command.
+    var names: [String] { [trigger] + (aliases ?? "").split(separator: " ").map(String.init) }
 
     var title: String { Action(rawValue: id)?.title ?? (name.flatMap { $0.isEmpty ? nil : $0 } ?? shortcut.map { HotKey.display($0.label) } ?? "") }
     var icon: String { Action(rawValue: id)?.icon ?? "keyboard" }
@@ -495,7 +499,7 @@ final class Store: ObservableObject {
         guard d.enabled else { return nil }
         if d.trigger.isEmpty { return "Needs a trigger" }
         if d.trigger.contains(" ") { return "Triggers can't contain spaces" }
-        if let other = defs.first(where: { $0.id != d.id && $0.enabled && $0.trigger == d.trigger }) {
+        if let other = defs.first(where: { $0.id != d.id && $0.enabled && !Set($0.names).isDisjoint(with: d.names) }) {
             return "Same trigger as \(Action(rawValue: other.id)?.title ?? other.id)"
         }
         return nil
@@ -967,6 +971,9 @@ struct CommandRow: View {
                 }
             }
             Spacer(minLength: 12)
+            KeyCapField(text: Binding(get: { def.aliases ?? "" }, set: { def.aliases = $0.isEmpty ? nil : $0 }),
+                        label: "Other triggers for \(a?.title ?? def.id), separated by spaces")
+                .disabled(!def.enabled)
             KeyCapField(text: $trigger, label: "Trigger for \(a?.title ?? def.id)", invalid: problem != nil)
                 .disabled(!def.enabled)
             Toggle("Use \(a?.title ?? def.id)", isOn: $def.enabled)

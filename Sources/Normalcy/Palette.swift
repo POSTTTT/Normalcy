@@ -771,12 +771,23 @@ struct PaletteView: View {
         return Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
                 GridRow {
-                    Text(r.0).foregroundStyle(.primary).gridCellColumns(r.1.isEmpty ? 2 : 1)
+                    if r.1.isEmpty { Text(r.0).foregroundStyle(.primary).gridCellColumns(2) }
+                    else { optionKeys(r.0) }
                     if !r.1.isEmpty { Text(r.1).foregroundStyle(.secondary) }
                 }
             }
         }
         .font(.system(size: 14))
+    }
+
+    // Keys to type as key caps ("j", "set", "1-9", "Return"); words that stand for something
+    // to type ("0-100", "app name", "nothing") stay plain text.
+    func optionKeys(_ keys: String) -> some View {
+        HStack(spacing: 4) {
+            ForEach(Array(keys.split(separator: " ").enumerated()), id: \.offset) { _, k in
+                if k.count <= 3 || k == "Return" { KeyCap(String(k)) } else { Text(k).foregroundStyle(.primary) }
+            }
+        }
     }
 
     // Mission Control-style thumbnails: target gets the accent border, current a faint one.

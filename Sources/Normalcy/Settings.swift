@@ -253,7 +253,7 @@ enum Action: String, CaseIterable {
         case .select: "<left> <right>  a word\n<down>  the line"
         case .pointer, .pointerStep: "<left> <down> <up> <right>  move\nReturn  click\nr  right click\n2  double click"
         case .hints: "label"
-        case .volume: "<down> <up>  quieter / louder\nset 0-100  that volume\nm  mute\nout  output device\napp name  first, for just that app"
+        case .volume: "<down> <up>  quieter / louder\nset 0-100  that volume\nm  mute\nout  output device\napp's name  first, for just that app"
         default: nil
         }
     }

@@ -149,8 +149,14 @@ final class Palette: ObservableObject {
     }
 
     // What the bar shows of the text: while picking a window to fill the space left, only the
-    // name typed to narrow it, not the switch command it runs on.
-    var shownText: String { fill == nil ? text : String(text.drop { $0 != " " }.drop { $0 == " " }) }
+    // name typed to narrow it, not the switch command it runs on. After "re " and keys, only "re":
+    // the box on screen already shows where the window goes.
+    var shownText: String {
+        if fill != nil { return String(text.drop { $0 != " " }.drop { $0 == " " }) }
+        let words = text.split(separator: " ")
+        if words.count > 1, Command.lookup(String(words[0]), in: defs())?.id == Action.resize.rawValue { return String(words[0]) }
+        return text
+    }
 
     // Name of the argument the typed command expects, once the command and a space are in.
     var argPlaceholder: String? {

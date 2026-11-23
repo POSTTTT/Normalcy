@@ -2165,6 +2165,10 @@ enum Main {
         precondition(ap.shownText == "saf" && ap.fill != nil)
         ap.text = ""
         precondition(ap.fill == nil && ap.shownText == "")
+        ap.text = "re hhh"
+        precondition(ap.shownText == "re")
+        ap.text = "re "
+        precondition(ap.shownText == "re ")
         precondition(asked == [nil, nil, nil, "saf", "google chrome"]) // not after "vol out" (levels are in the list) or b
         ap.text = "d 2"
         precondition(ap.appMatches == nil) // only after b, o and vol out

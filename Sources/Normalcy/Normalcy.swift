@@ -518,7 +518,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if fromBar, case .layout(let f) = cmd {
                 fillAreas = Command.fillAreas(f)
                 fillTaken = Set([placed].compactMap { $0 })
-                whenSettled(placedAX) { self.offerFill() }
+                let round = fillRound
+                whenSettled(placedAX) { self.offerFill(round) }
             }
         }
         palette.submitContinuing = { [weak self] text in
@@ -592,7 +593,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // Quarters: on to the next empty one.
             if fill != nil {
                 fillTaken.insert(w.id)
-                whenSettled(axWindow(w.pid, id: w.id)) { self.offerFill() }
+                let round = fillRound
+                whenSettled(axWindow(w.pid, id: w.id)) { self.offerFill(round) }
             }
         }
         panel.contentView = NSHostingView(rootView: PaletteView(model: palette))
@@ -644,6 +646,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func show() {
+        fillRound += 1 // the bar opened since: a fill picker still waiting is dropped
         target = NSWorkspace.shared.frontmostApplication
         // Chrome and Electron apps build their accessibility tree only when asked; ask now,
         // so it's ready by the time "cl " needs it.
@@ -694,13 +697,16 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    var fillRound = 0 // bumped each time the bar opens
     var fillAreas: [CGRect] = [] // after a half, third or quarter: the areas a picked window can go to
     var fillTaken = Set<CGWindowID>() // windows already placed in this round, left out of the list
 
     // The bar again, as "b " listing only the other windows on this desktop, for the first area
     // left with no window in it; picking one puts it there. Nothing to pick, every area already
     // has a window, or the switch command off: stays closed.
-    func offerFill() {
+    func offerFill(_ round: Int) {
+        // The bar was opened since (another command, typed meanwhile), or is up: too late to offer.
+        guard round == fillRound, !panel.isVisible else { return }
         guard let b = palette.defs().first(where: { $0.enabled && $0.id == Action.focus.rawValue })?.trigger,
               let s = Self.screenBounds() else { return }
         let current = Desktops.read().currentID
@@ -726,10 +732,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    // A window sits in that area: it covers most of it and little else, so a big window behind doesn't count.
+    // A window sits in that area: mostly inside it, so a big window behind doesn't count, and
+    // taking at least a quarter of it, so one shrunk with "re" still does.
     static func fills(_ w: CGRect, _ area: CGRect) -> Bool {
         let i = w.intersection(area), size = { (r: CGRect) in r.isNull ? 0 : r.width * r.height }
-        return size(i) >= 0.8 * size(area) && size(i) >= 0.8 * size(w)
+        return size(i) >= 0.25 * size(area) && size(i) >= 0.8 * size(w)
     }
 
     // Closing stays instant: a fading bar would get caught in a desktop switch.
@@ -903,7 +910,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case .moveToDesktop(let key):
             moveWindow(toDesktop: key)
         case .layout(let f):
-            if !macTile(f) { place(f) }
+            let w = focusedWindow()
+            guard macTile(f) else { return place(f) }
+            // macOS's own tiling sometimes leaves the window where it was, e.g. once it was resized
+            // by hand since it last tiled, or stops it mid-way; then put it there directly.
+            whenSettled(w) { [weak self] in
+                guard let self, let w, let b = Self.screenBounds(), let now = axFrame(w) else { return }
+                if !Self.near(now, Self.frame(f, in: b)) { place(f, window: w) }
+            }
         case .resize, .resizeEdge:
             resizeFocused(cmd)
         case .scroll(let steps):
@@ -1382,9 +1396,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let v = screen.visibleFrame
         // AX uses top-left origin of the primary screen; AppKit uses bottom-left.
         let bounds = CGRect(x: v.minX, y: primary.frame.maxY - v.maxY, width: v.width, height: v.height)
-        let target = CGRect(x: bounds.minX + v.width * f.minX, y: bounds.minY + v.height * f.minY,
-                            width: v.width * f.width, height: v.height * f.height)
-        setFrame(w, target, bounds: bounds)
+        setFrame(w, Self.frame(f, in: bounds), bounds: bounds)
+    }
+
+    // A layout's fractions of the screen as a frame in that area.
+    static func frame(_ f: CGRect, in b: CGRect) -> CGRect {
+        CGRect(x: b.minX + b.width * f.minX, y: b.minY + b.height * f.minY, width: b.width * f.width, height: b.height * f.height)
+    }
+
+    // Every edge within 30 points: room for the margins macOS can leave around tiled windows.
+    static func near(_ a: CGRect, _ b: CGRect) -> Bool {
+        [a.minX - b.minX, a.minY - b.minY, a.maxX - b.maxX, a.maxY - b.maxY].allSatisfy { abs($0) <= 30 }
     }
 
     // Scrolls the target window a quarter of its height (or width) per step, aimed at the
@@ -1613,6 +1635,12 @@ enum Main {
         precondition(App.fills(CGRect(x: 505, y: 0, width: 495, height: 800), rightArea))
         precondition(!App.fills(CGRect(x: 0, y: 0, width: 1000, height: 800), rightArea)) // full-screen window behind
         precondition(!App.fills(CGRect(x: 0, y: 0, width: 500, height: 800), rightArea)) // the placed half
+        precondition(App.fills(CGRect(x: 500, y: 0, width: 300, height: 800), rightArea)) // shrunk with re
+        precondition(App.frame(Command.layoutRect(.right)!, in: CGRect(x: 0, y: 25, width: 1000, height: 800))
+                     == CGRect(x: 500, y: 25, width: 500, height: 800))
+        precondition(App.near(CGRect(x: 508, y: 33, width: 484, height: 784), CGRect(x: 500, y: 25, width: 500, height: 800)))
+        precondition(!App.near(CGRect(x: 600, y: 25, width: 400, height: 800), CGRect(x: 500, y: 25, width: 500, height: 800)))
+        precondition(!App.fills(CGRect(x: 600, y: 300, width: 100, height: 100), rightArea)) // a small one
         precondition(Command.parse("d 2", d) == .ctrlKey(19))
         precondition(Command.parse("d l", d) == .ctrlKey(124))
         precondition(Command.parse("d 0", d) == nil)

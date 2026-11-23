@@ -743,11 +743,14 @@ struct PaletteView: View {
             ForEach(Array(blocks.enumerated()), id: \.offset) { i, word in
                 let hint = store.showHints && i == blocks.count - 1 ? model.argPlaceholder : nil // off: an empty cap
                 let stacked = store.hintsVertical && hint?.contains("\n") == true
-                Text(hint.map { stacked ? $0 : $0.replacingOccurrences(of: "\n", with: " · ") } ?? Palette.spacedArrows(word))
-                    .font(hint == nil ? .system(size: 22, weight: .medium, design: .monospaced) : .system(size: stacked ? 14 : 17))
-                    .foregroundStyle(hint == nil ? .primary : .secondary)
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(3)
+                Group {
+                    if stacked, let hint { optionGrid(hint) }
+                    else {
+                        Text(hint.map { $0.replacingOccurrences(of: "\n", with: " · ") } ?? Palette.spacedArrows(word))
+                            .font(hint == nil ? .system(size: 22, weight: .medium, design: .monospaced) : .system(size: 17))
+                            .foregroundStyle(hint == nil ? .primary : .secondary)
+                    }
+                }
                     .padding(.horizontal, 14)
                     .padding(.vertical, stacked ? 10 : 0)
                     .frame(minWidth: 44, minHeight: 44)
@@ -757,6 +760,23 @@ struct PaletteView: View {
         }
         // Typed many times a day, so quick and without bounce.
         .animation(motion(0.15) ?? .linear(duration: 0.1), value: blocks)
+    }
+
+    // Options one per line, as "keys  what they do": the keys in a column of their own, brighter,
+    // so the descriptions line up. A line with no two-space gap spans both columns.
+    func optionGrid(_ hint: String) -> some View {
+        let rows = hint.split(separator: "\n").map { line in
+            line.range(of: "  ").map { (String(line[..<$0.lowerBound]), String(line[$0.upperBound...])) } ?? (String(line), "")
+        }
+        return Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
+                GridRow {
+                    Text(r.0).foregroundStyle(.primary).gridCellColumns(r.1.isEmpty ? 2 : 1)
+                    if !r.1.isEmpty { Text(r.1).foregroundStyle(.secondary) }
+                }
+            }
+        }
+        .font(.system(size: 14))
     }
 
     // Mission Control-style thumbnails: target gets the accent border, current a faint one.

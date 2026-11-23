@@ -3,7 +3,7 @@ import SwiftUI
 
 enum Action: String, CaseIterable {
     case open, focus, desktop, move, tab, newTab, closeTab, nextTab, prevTab, tabs, back, forward, left, right, top, bottom, full, center
-    case leftThird, centerThird, rightThird, topLeft, topRight, bottomLeft, bottomRight
+    case leftThird, centerThird, rightThird, leftTwoThirds, rightTwoThirds, topLeft, topRight, bottomLeft, bottomRight
     case grow, shrink, resize
     case scroll, arrows
     case copy, cut, copyWord, cutWord, paste, undo, redo, selectAll, select, deselect, lineStart, lineEnd
@@ -37,6 +37,8 @@ enum Action: String, CaseIterable {
         case .leftThird: "h3"
         case .centerThird: "c3"
         case .rightThird: "l3"
+        case .leftTwoThirds: "h23"
+        case .rightTwoThirds: "l23"
         case .topLeft: "hk"
         case .topRight: "lk"
         case .bottomLeft: "hj"
@@ -94,6 +96,8 @@ enum Action: String, CaseIterable {
         case .leftThird: "Left Third"
         case .centerThird: "Center Third"
         case .rightThird: "Right Third"
+        case .leftTwoThirds: "Left Two Thirds"
+        case .rightTwoThirds: "Right Two Thirds"
         case .topLeft: "Top Left Quarter"
         case .topRight: "Top Right Quarter"
         case .bottomLeft: "Bottom Left Quarter"
@@ -151,6 +155,8 @@ enum Action: String, CaseIterable {
         case .leftThird: "rectangle.leadingthird.inset.filled"
         case .centerThird: "rectangle.split.3x1"
         case .rightThird: "rectangle.trailingthird.inset.filled"
+        case .leftTwoThirds: "rectangle.leadinghalf.inset.filled" // no two-thirds symbol
+        case .rightTwoThirds: "rectangle.trailinghalf.inset.filled"
         case .topLeft: "rectangle.inset.topleft.filled"
         case .topRight: "rectangle.inset.topright.filled"
         case .bottomLeft: "rectangle.inset.bottomleft.filled"
@@ -194,7 +200,7 @@ enum Action: String, CaseIterable {
         case .open, .focus: "Apps"
         case .desktop, .move, .tab, .newTab, .closeTab, .nextTab, .prevTab, .tabs, .back, .forward: "Desktops & Tabs"
         case .left, .right, .top, .bottom: "Halves"
-        case .leftThird, .centerThird, .rightThird: "Thirds"
+        case .leftThird, .centerThird, .rightThird, .leftTwoThirds, .rightTwoThirds: "Thirds"
         case .topLeft, .topRight, .bottomLeft, .bottomRight: "Quarters"
         case .full, .center: "Fill & Center"
         case .grow, .shrink, .resize: "Resize"
@@ -272,7 +278,7 @@ struct CommandDef: Codable, Identifiable, Equatable {
     // Sets the direction keys (left, down, up, right) and renames them inside the thirds and
     // quarters triggers, all at once so swaps like h j k l -> j k i l don't collide.
     static func setDirections(_ keys: [String], in defs: [CommandDef]) -> [CommandDef] {
-        let built: Set<Action> = [.leftThird, .centerThird, .rightThird, .topLeft, .topRight, .bottomLeft, .bottomRight]
+        let built: Set<Action> = [.leftThird, .centerThird, .rightThird, .leftTwoThirds, .rightTwoThirds, .topLeft, .topRight, .bottomLeft, .bottomRight]
         var map: [Character: Character] = [:]
         for (a, new) in zip(Action.directions, keys) {
             if let old = defs.first(where: { $0.id == a.rawValue })?.trigger, old.count == 1, let n = new.first {
@@ -466,7 +472,7 @@ final class Store: ObservableObject {
     static func repairDirections(_ defs: [CommandDef]) -> [CommandDef] {
         let keys = Action.directions.map { a in defs.first { $0.id == a.rawValue }?.trigger ?? "" }
         guard keys.contains(where: { $0.count != 1 || $0 == " " }) || Set(keys).count != 4 else { return defs }
-        let built = Action.directions + [.leftThird, .centerThird, .rightThird, .topLeft, .topRight, .bottomLeft, .bottomRight]
+        let built = Action.directions + [.leftThird, .centerThird, .rightThird, .leftTwoThirds, .rightTwoThirds, .topLeft, .topRight, .bottomLeft, .bottomRight]
         return defs.map { d in
             guard let a = Action(rawValue: d.id), built.contains(a) else { return d }
             var d = d

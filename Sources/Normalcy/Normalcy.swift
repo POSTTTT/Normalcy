@@ -15,6 +15,7 @@ import SwiftUI
 //   ts <h|l>…      previous / next tab as each key is pressed
 //   fw bk          forward / back, like a two-finger swipe
 //   h l k j        window: left / right / top / bottom half
+//   h23 l23        window: left / right two thirds
 //   f c            window: full / center
 //   + -            window: 10% bigger / smaller, staying centered
 //   re <h|l|k|j>…  window: narrower / wider / shorter / taller, one step per key
@@ -159,7 +160,7 @@ enum Command: Equatable {
             return arg.isEmpty ? nil : .focus(arg)
         case .desktop: return desktopKey(arg, defs).map { .ctrlKey($0) }
         case .move: return desktopKey(arg, defs).map { .moveToDesktop($0) }
-        case .left, .right, .top, .bottom, .full, .center, .leftThird, .centerThird, .rightThird,
+        case .left, .right, .top, .bottom, .full, .center, .leftThird, .centerThird, .rightThird, .leftTwoThirds, .rightTwoThirds,
              .topLeft, .topRight, .bottomLeft, .bottomRight:
             return layoutRect(action).map { .layout($0) }
         case .tab:
@@ -276,6 +277,8 @@ enum Command: Equatable {
         case .leftThird: CGRect(x: 0, y: 0, width: 1.0 / 3, height: 1)
         case .centerThird: CGRect(x: 1.0 / 3, y: 0, width: 1.0 / 3, height: 1)
         case .rightThird: CGRect(x: 2.0 / 3, y: 0, width: 1.0 / 3, height: 1)
+        case .leftTwoThirds: CGRect(x: 0, y: 0, width: 2.0 / 3, height: 1)
+        case .rightTwoThirds: CGRect(x: 1.0 / 3, y: 0, width: 2.0 / 3, height: 1)
         case .topLeft: CGRect(x: 0, y: 0, width: 0.5, height: 0.5)
         case .topRight: CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5)
         case .bottomLeft: CGRect(x: 0, y: 0.5, width: 0.5, height: 0.5)
@@ -366,8 +369,15 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         w.isReleasedWhenClosed = false
         // Opens on the desktop you're on, instead of switching back to the one it was last on.
         w.collectionBehavior = .moveToActiveSpace
+        // Back out of Cmd+Tab and the Dock once Settings closes; openSettings puts it in.
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: .main) { _ in
+            NSApp.setActivationPolicy(.accessory)
+        }
         return w
     }()
+
+    static let devIcon: NSImage? = Bundle.main.bundlePath.hasSuffix(".app") ? nil
+        : Bundle.module.url(forResource: "AppIcon", withExtension: "png").flatMap(NSImage.init(contentsOf:))
 
     func applicationDidFinishLaunching(_ n: Notification) {
         // Never shown (Normalcy has no menu bar), but its shortcuts still work: Cmd+W closes Settings.
@@ -380,9 +390,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.mainMenu = mainMenu
         // The icon macOS shows for Normalcy, e.g. in alerts and app switchers. Normalcy.app carries
         // its own (scripts/build-app.sh); Bundle.module is only for swift run, and crashes in an .app.
-        if !Bundle.main.bundlePath.hasSuffix(".app") {
-            NSApp.applicationIconImage = Bundle.module.url(forResource: "AppIcon", withExtension: "png").flatMap(NSImage.init(contentsOf:))
-        }
+        if let icon = Self.devIcon { NSApp.applicationIconImage = icon }
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
         buildPanel()
         registerHotKey()
@@ -482,6 +490,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Center on the screen you're working on, not the one it was last on.
         if let s = NSScreen.main, w.screen != s { w.setFrameOrigin(NSPoint(x: s.visibleFrame.midX, y: s.visibleFrame.midY)) }
         w.center()
+        // A regular app while Settings is open, so Cmd+Tab (and the Dock) can bring it back.
+        NSApp.setActivationPolicy(.regular)
+        if let icon = Self.devIcon { NSApp.applicationIconImage = icon } // swift run: the Dock tile starts blank
         // The plain activate() is only a request, and macOS can turn it down once the bar has
         // hidden, leaving Settings behind the app in front.
         NSApp.activate(ignoringOtherApps: true)
@@ -1568,6 +1579,10 @@ enum Main {
         precondition(Command.fillAreas(Command.layoutRect(.rightThird)!) == [.leftThird, .centerThird].map { Command.layoutRect($0)! })
         precondition(Command.fillAreas(Command.layoutRect(.leftThird)!) == [.rightThird, .centerThird].map { Command.layoutRect($0)! })
         precondition(Command.fillAreas(Command.layoutRect(.centerThird)!).count == 2)
+        precondition(Command.fillAreas(Command.layoutRect(.leftTwoThirds)!).map { [$0.minX, $0.width].map { ($0 * 3).rounded() } } == [[2, 1]])
+        precondition(Command.fillAreas(Command.layoutRect(.rightTwoThirds)!) == [Command.layoutRect(.leftThird)!])
+        precondition(Command.parse("h23", d) == .layout(Command.layoutRect(.leftTwoThirds)!))
+        precondition(Command.parse("←23", d) == .layout(Command.layoutRect(.leftTwoThirds)!))
         precondition(Command.fillAreas(Command.layoutRect(.topLeft)!) == [.topRight, .bottomLeft, .bottomRight].map { Command.layoutRect($0)! })
         precondition(Command.fillAreas(Command.layoutRect(.bottomRight)!) == [.bottomLeft, .topRight, .topLeft].map { Command.layoutRect($0)! })
         precondition([.full, .center].allSatisfy { Command.fillAreas(Command.layoutRect($0)!).isEmpty })

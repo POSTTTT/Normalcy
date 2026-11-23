@@ -74,6 +74,7 @@ These take no input.
 | --- | --- | --- |
 | `h` `l` `k` `j` | Left, Right, Top, Bottom Half | Fills that half of the screen, then, unless a window is already there, lists the other windows on this desktop: pick one to fill the other half, or **Esc** to skip |
 | `h3` `c3` `l3` | Left, Center, Right Third | Fills that third, then offers each empty third in turn, the far side first: pick a window for it, or **Esc** to stop |
+| `h23` `l23` | Left, Right Two Thirds | Fills two thirds of the screen, then offers the third left over |
 | `hk` `lk` `hj` `lj` | Top Left, Top Right, Bottom Left, Bottom Right Quarter | Fills that quarter, then offers each empty quarter in turn: pick a window for it, or **Esc** to stop. Either order works: `kh` = `hk` |
 | `f` | Fill Screen | Fills the screen |
 | `c` | Center | Puts the window in the middle, 70% wide and 80% tall |

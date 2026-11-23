@@ -148,8 +148,13 @@ final class Palette: ObservableObject {
         return out
     }
 
+    // What the bar shows of the text: while picking a window to fill the space left, only the
+    // name typed to narrow it, not the switch command it runs on.
+    var shownText: String { fill == nil ? text : String(text.drop { $0 != " " }.drop { $0 == " " }) }
+
     // Name of the argument the typed command expects, once the command and a space are in.
     var argPlaceholder: String? {
+        if fill != nil { return nil }
         let words = text.split(separator: " ")
         guard words.count == 1, text.hasSuffix(" "),
               let d = Command.lookup(String(words[0]), in: defs()) else { return nil }
@@ -692,8 +697,8 @@ struct PaletteView: View {
                 .contentTransition(.symbolEffect(.replace))
             if model.text.isEmpty {
                 Text("Type a command").foregroundStyle(.white.opacity(0.45))
-            } else {
-                Text(Palette.spacedArrows(model.text))
+            } else if !model.shownText.isEmpty {
+                Text(Palette.spacedArrows(model.shownText))
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
             }
@@ -733,7 +738,7 @@ struct PaletteView: View {
     // plus an empty block for the next word. New blocks pop in.
     // shortcut: long input runs past the panel edge; wrap if that becomes a problem.
     var keys: some View {
-        var blocks = Palette.keyBlocks(model.text, showSpaces: store.showSpaces)
+        var blocks = model.fill != nil && model.shownText.isEmpty ? [] : Palette.keyBlocks(model.shownText, showSpaces: store.showSpaces)
         // While a strip, grid or list shows what to pick, the empty block waiting for the next
         // word says nothing; it stays when it holds the options.
         let choosing = model.text.contains(" ") && (model.windowMatches != nil || model.appMatches?.isEmpty == false

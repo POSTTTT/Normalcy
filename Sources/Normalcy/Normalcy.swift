@@ -2109,6 +2109,14 @@ enum Main {
         var asked: [String?] = []
         ap.volumeInfo = { asked.append($0); return nil }
         for t in ["vol", "vol ", "vol se", "vol saf", "vol google chrome j", "vol out a", "t saf"] { ap.text = t; _ = ap.volumeShown }
+        // Picking a window to fill the space left: the bar shows only the name typed, no "t" or options.
+        ap.text = "t "
+        ap.fill = CGRect(x: 0.5, y: 0, width: 0.5, height: 1)
+        precondition(ap.shownText == "" && ap.argPlaceholder == nil)
+        ap.text = "t saf"
+        precondition(ap.shownText == "saf" && ap.fill != nil)
+        ap.text = ""
+        precondition(ap.fill == nil && ap.shownText == "")
         precondition(asked == [nil, nil, nil, "saf", "google chrome"]) // not after "vol out" (levels are in the list) or b
         ap.text = "d 2"
         precondition(ap.appMatches == nil) // only after b, o and vol out

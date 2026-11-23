@@ -22,12 +22,12 @@ short commands for apps, desktops, tabs and windows, without touching the mouse.
    ⌥ Space ──▶ type  re ll  ──▶ Return ──▶ window two steps wider, the one beside it narrower
 ```
 
-- **Vim-style triggers.** `h` `j` `k` `l` for halves, `h3` `c3` `l3` for thirds,
+- **Vim-style triggers.** `h` `j` `k` `l` for halves, `hh` `jk` `ll` for thirds,
   `hk` for the top-left quarter, `d 2` for desktop 2. Arrow keys work too.
 - **Everything is yours to rename.** Every trigger, and the direction keys
   themselves: pick W A S D or I J K L and the thirds and quarters follow.
 - **See before you commit.** A translucent box shows where the window will go,
-  `d` and `m` show your desktops as thumbnails, and `b` previews the app's window.
+  `d` and `mwd` show your desktops as thumbnails, and `t` previews the app's window.
 - **Keep going.** Shift+Return runs a command and keeps the bar open for the next one.
 - **Stays out of the way.** A menu bar app with no Dock icon. The bar appears on
   the hotkey and disappears when you're done.
@@ -68,7 +68,7 @@ Normalcy lives in the menu bar as a ⌘ icon. On first launch macOS asks for:
   start Normalcy with `swift run`, macOS grants it to your terminal app, so turn
   that app on in System Settings › Privacy & Security › Accessibility.
 - **Screen Recording** (optional), for desktop thumbnails and app previews.
-  Without it, every desktop shows your wallpaper and `b` shows app icons.
+  Without it, every desktop shows your wallpaper and `t` shows app icons.
 
 ## Using it
 
@@ -81,7 +81,7 @@ command with its trigger, and Settings › Commands is where you rename them.
   trigger so you can keep typing.
 - The list matches by trigger or by name: `half` finds all four half-screen
   commands.
-- `b`'s app list shows what Cmd+Tab shows: apps with a window on this desktop,
+- `t`'s app list shows what Cmd+Tab shows: apps with a window on this desktop,
   plus Finder, most recent first.
 
 ## Settings
@@ -101,7 +101,7 @@ command off to hide it. **Reset These** restores a page's original triggers.
 
 ### Desktop shortcuts
 
-`d` and `m` press the Mission Control shortcuts for you, in System Settings ›
+`d` and `mwd` press the Mission Control shortcuts for you, in System Settings ›
 Keyboard › Keyboard Shortcuts › Mission Control. "Move left a space" and "Move
 right a space" are on by default and are all Normalcy needs. Turn on "Switch to
 Desktop 1", "Switch to Desktop 2" and so on to make `d 1`–`d 9` jump straight
@@ -112,7 +112,7 @@ there instead of stepping through the desktops in between.
 Run a command in the running Normalcy, against the front app, as if you'd typed it:
 
 ```sh
-.build/debug/Normalcy --run "t h"
+.build/debug/Normalcy --run "mt h"
 ```
 
 Any program running under your account can do this.
@@ -148,10 +148,10 @@ It isn't notarized either way: see [Install](#install) for opening a downloaded 
   handled well yet.
 - Reading desktops uses a private macOS function, since there's no public one. A
   future macOS update could break it.
-- `m` works by briefly dragging the window by its title bar while switching
+- `mwd` works by briefly dragging the window by its title bar while switching
   desktops. It fails on windows with no empty title bar space just right of the
   green button.
-- `t` clicks the app's "Move Tab to New Window" menu item, so it only works in apps
+- `mt` clicks the app's "Move Tab to New Window" menu item, so it only works in apps
   that have one (Safari, Finder, Terminal, Ghostty and other apps using standard
   macOS tabs) and only when macOS is set to English.
 - `tn` and `tp` press Cmd+Shift+] and Cmd+Shift+[, so they only work in apps

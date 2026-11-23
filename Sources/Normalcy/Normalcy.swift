@@ -6,16 +6,17 @@ import SwiftUI
 
 // Commands (default triggers, editable in Settings):
 //   o <app>        open/launch app            e.g. o Safari
-//   b <app>        switch to running app      e.g. b saf
+//   t <app>        switch to running app      e.g. t saf
 //   d <1-9|h|l>    go to desktop N / left / right
-//   m <1-9|h|l>    move focused window to desktop N / left / right
-//   t [h|l|k|j|f|c]   move current tab to a new window, optionally placed with a layout
+//   mwd <1-9|h|l>  move focused window to desktop N / left / right
+//   mt [h|l|k|j|f|c]  move current tab to a new window, optionally placed with a layout
 //   nt ct          new / close tab
 //   tn tp          next / previous tab
 //   ts <h|l>…      previous / next tab as each key is pressed
 //   fw bk          forward / back, like a two-finger swipe
 //   h l k j        window: left / right / top / bottom half
-//   h23 l23        window: left / right two thirds
+//   hh jk ll       window: left / center / right third
+//   hl lh          window: left / right two thirds
 //   f c            window: full / center
 //   + -            window: 10% bigger / smaller, staying centered
 //   re <h|l|k|j>…  window: narrower / wider / shorter / taller, one step per key
@@ -1530,9 +1531,9 @@ enum Main {
         let d = CommandDef.defaults
         precondition(Command.parse("o Safari", d) == .open("Safari"))
         precondition(Command.parse("o Visual Studio Code", d) == .open("Visual Studio Code"))
-        precondition(Command.parse("b saf", d) == .focus("saf"))
-        precondition(Command.parse("b h", d) == .focusWindow(.left))
-        precondition(Command.parse("b ho", d) == .focus("ho"))
+        precondition(Command.parse("t saf", d) == .focus("saf"))
+        precondition(Command.parse("t h", d) == .focusWindow(.left))
+        precondition(Command.parse("t ho", d) == .focus("ho"))
         precondition(Command.parse("vol set 50", d) == .volume(app: nil, .set(50)))
         precondition(Command.parse("vol set 101", d) == nil)
         precondition(Command.parse("vol kk", d) == .volume(app: nil, .step(2)))
@@ -1552,7 +1553,7 @@ enum Main {
         broken[broken.firstIndex { $0.id == "leftThird" }!].trigger = "  "
         broken[broken.firstIndex { $0.id == "top" }!].enabled = false
         let fixed = Store.repairDirections(broken)
-        precondition(fixed.first { $0.id == "left" }?.trigger == "h" && fixed.first { $0.id == "leftThird" }?.trigger == "h3")
+        precondition(fixed.first { $0.id == "left" }?.trigger == "h" && fixed.first { $0.id == "leftThird" }?.trigger == "hh")
         precondition(fixed.first { $0.id == "top" }?.enabled == false && Store.repairDirections(d) == d)
         precondition(Command.parse("pp", d) == .media(.playPause) && Command.parse("nx", d) == .media(.next))
         precondition(Command.parse("ff", d) == .media(.skip(10)) && Command.parse("rw", d) == .media(.skip(-10)))
@@ -1585,8 +1586,8 @@ enum Main {
         aka[aka.firstIndex { $0.id == "full" }!].aliases = "full max"
         precondition(Command.parse("full", aka) == .layout(Command.layoutRect(.full)!) && Command.parse("max", aka) == Command.parse("f", aka))
         precondition(Command.parse("full", d) == nil)
-        precondition(Command.parse("h23", d) == .layout(Command.layoutRect(.leftTwoThirds)!))
-        precondition(Command.parse("←23", d) == .layout(Command.layoutRect(.leftTwoThirds)!))
+        precondition(Command.parse("hl", d) == .layout(Command.layoutRect(.leftTwoThirds)!))
+        precondition(Command.parse("←→", d) == .layout(Command.layoutRect(.leftTwoThirds)!))
         precondition(Command.fillAreas(Command.layoutRect(.topLeft)!) == [.topRight, .bottomLeft, .bottomRight].map { Command.layoutRect($0)! })
         precondition(Command.fillAreas(Command.layoutRect(.bottomRight)!) == [.bottomLeft, .topRight, .topLeft].map { Command.layoutRect($0)! })
         precondition([.full, .center].allSatisfy { Command.fillAreas(Command.layoutRect($0)!).isEmpty })
@@ -1597,22 +1598,22 @@ enum Main {
         precondition(Command.parse("d 2", d) == .ctrlKey(19))
         precondition(Command.parse("d l", d) == .ctrlKey(124))
         precondition(Command.parse("d 0", d) == nil)
-        precondition(Command.parse("m 3", d) == .moveToDesktop(20))
-        precondition(Command.parse("m h", d) == .moveToDesktop(123))
-        precondition(Command.parse("m", d) == nil)
+        precondition(Command.parse("mwd 3", d) == .moveToDesktop(20))
+        precondition(Command.parse("mwd h", d) == .moveToDesktop(123))
+        precondition(Command.parse("mwd", d) == nil)
         precondition(Command.parse("h", d) == .layout(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
         precondition(Command.parse("set", d) == .settings)
-        precondition(Command.parse("t", d) == .tabToWindow(nil))
-        precondition(Command.parse("t h", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
-        precondition(Command.parse("t f", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 1, height: 1)))
-        precondition(Command.parse("t x", d) == nil)
+        precondition(Command.parse("mt", d) == .tabToWindow(nil))
+        precondition(Command.parse("mt h", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
+        precondition(Command.parse("mt f", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 1, height: 1)))
+        precondition(Command.parse("mt x", d) == nil)
         precondition(Command.parse("nt", d) == .keys(HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(cmdKey), label: "⌘T")))
         precondition(Command.parse("ct", d) == .keys(HotKey(keyCode: UInt32(kVK_ANSI_W), modifiers: UInt32(cmdKey), label: "⌘W")))
         precondition(Command.parse("tn", d) == .switchTab(next: true))
         precondition(Command.parse("tp", d) == .switchTab(next: false))
         precondition(Command.parse("fw", d) == .history(forward: true))
         precondition(Command.parse("bk", d) == .history(forward: false))
-        precondition(Command.parse("t o", d) == nil) // only layout triggers allowed
+        precondition(Command.parse("mt o", d) == nil) // only layout triggers allowed
         precondition(Command.parse("o", d) == nil)
         precondition(Command.parse("", d) == nil)
         // Renamed trigger works, old one doesn't; hidden command doesn't run.
@@ -1660,7 +1661,7 @@ enum Main {
         p.desktops = Desktops(ids: [10, 20, 30, 40], currentID: 20)
         p.text = "d"
         precondition(p.desktopCommand?.id == "desktop" && p.desktopTarget == nil)
-        p.text = "m h"
+        p.text = "mwd h"
         precondition(p.desktopCommand?.id == "move" && p.desktopTarget == 1)
         p.text = "d 4"
         precondition(p.desktopTarget == 4)
@@ -1683,18 +1684,18 @@ enum Main {
         precondition(r.text == "←" && r.matches.first?.id == "left")
         precondition(Command.parse("←", d) == .layout(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
         precondition(Command.parse("↓", d) == .layout(CGRect(x: 0, y: 0.5, width: 1, height: 0.5)))
-        r.text = "t"
+        r.text = "mt"
         r.typeArrow("←")
-        precondition(r.text == "t ←")
-        precondition(Command.parse("t ←", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
-        r.text = "m "
+        precondition(r.text == "mt ←")
+        precondition(Command.parse("mt ←", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 0.5, height: 1)))
+        r.text = "mwd "
         r.typeArrow("→")
-        precondition(r.text == "m →" && Command.parse("d →", d) == .ctrlKey(124)) // d's arrows go at once; see below
+        precondition(r.text == "mwd →" && Command.parse("d →", d) == .ctrlKey(124)) // d's arrows go at once; see below
         // h j k l add the space too, unless they start another trigger.
-        r.text = "m"
-        precondition(r.typeDirection("h") && r.text == "m h")
-        r.text = "t"
-        precondition(r.typeDirection("h") && r.text == "t h" && !r.typeDirection("x"))
+        r.text = "mwd"
+        precondition(r.typeDirection("h") && r.text == "mwd h")
+        r.text = "mt"
+        precondition(r.typeDirection("h") && r.text == "mt h" && !r.typeDirection("x"))
         r.text = "h"
         precondition(!r.typeDirection("k")) // "hk" is the top-left corner, typed as usual
         r.text = ""
@@ -1715,7 +1716,7 @@ enum Main {
         q.defs = { d }
         q.text = "h"
         precondition(q.layoutPreview == CGRect(x: 0, y: 0, width: 0.5, height: 1))
-        q.text = "t l"
+        q.text = "mt l"
         precondition(q.layoutPreview == CGRect(x: 0.5, y: 0, width: 0.5, height: 1))
         q.text = "o Safari"
         precondition(q.layoutPreview == nil)
@@ -1725,23 +1726,23 @@ enum Main {
         // Checked against plain numbers: CGRect also takes Ints, where 1 / 3 is 0.
         precondition(Command.layoutRect(.leftThird)!.width > 0.33 && Command.layoutRect(.leftThird)!.width < 0.34)
         precondition(Command.layoutRect(.rightThird)!.minX > 0.66)
-        precondition(Command.parse("h3", d) == .layout(CGRect(x: 0, y: 0, width: 1.0 / 3, height: 1)))
-        precondition(Command.parse("l3", d) == .layout(CGRect(x: 2.0 / 3, y: 0, width: 1.0 / 3, height: 1)))
+        precondition(Command.parse("hh", d) == .layout(CGRect(x: 0, y: 0, width: 1.0 / 3, height: 1)))
+        precondition(Command.parse("ll", d) == .layout(CGRect(x: 2.0 / 3, y: 0, width: 1.0 / 3, height: 1)))
         precondition(Command.parse("hk", d) == .layout(CGRect(x: 0, y: 0, width: 0.5, height: 0.5)))
         precondition(Command.parse("lj", d) == .layout(CGRect(x: 0.5, y: 0.5, width: 0.5, height: 0.5)))
         precondition(Command.parse("←↑", d) == Command.parse("hk", d))
         precondition(Command.parse("↑←", d) == Command.parse("hk", d))
         precondition(Command.parse("→↓", d) == Command.parse("lj", d))
-        precondition(Command.parse("←←", d) == nil)
+        precondition(Command.parse("↓↓", d) == nil)
         precondition(Command.parse("kh", d) == Command.parse("hk", d))
         precondition(Command.parse("jl", d) == Command.parse("lj", d))
         precondition(Command.parse("h↑", d) == Command.parse("hk", d))
-        precondition(Command.parse("hl", d) == nil) // left + right is no corner
-        precondition(Command.parse("←3", d) == Command.parse("h3", d))
-        precondition(Command.parse("→3", d) == Command.parse("l3", d))
-        precondition(Command.parse("t ←3", d) == .tabToWindow(Command.layoutRect(.leftThird)))
-        precondition(Command.parse("t kh", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 0.5, height: 0.5)))
-        precondition(Command.parse("t c3", d) == .tabToWindow(CGRect(x: 1.0 / 3, y: 0, width: 1.0 / 3, height: 1)))
+        precondition(Command.parse("kj", d) == nil) // up + down is no corner
+        precondition(Command.parse("←←", d) == Command.parse("hh", d))
+        precondition(Command.parse("→→", d) == Command.parse("ll", d))
+        precondition(Command.parse("mt ←←", d) == .tabToWindow(Command.layoutRect(.leftThird)))
+        precondition(Command.parse("mt kh", d) == .tabToWindow(CGRect(x: 0, y: 0, width: 0.5, height: 0.5)))
+        precondition(Command.parse("mt jk", d) == .tabToWindow(CGRect(x: 1.0 / 3, y: 0, width: 1.0 / 3, height: 1)))
         let t = Palette()
         t.defs = { d }
         t.text = "h"
@@ -1756,8 +1757,8 @@ enum Main {
         let ijkl = CommandDef.setDirections(Array("jkil").map(String.init), in: d)
         func trig(_ a: Action, _ defs: [CommandDef]) -> String { defs.first { $0.id == a.rawValue }!.trigger }
         precondition(trig(.left, ijkl) == "j" && trig(.bottom, ijkl) == "k" && trig(.top, ijkl) == "i")
-        precondition(trig(.leftThird, ijkl) == "j3" && trig(.bottomLeft, ijkl) == "jk" && trig(.topRight, ijkl) == "li")
-        precondition(trig(.centerThird, ijkl) == "c3")
+        precondition(trig(.leftThird, ijkl) == "jj" && trig(.bottomLeft, ijkl) == "jk" && trig(.topRight, ijkl) == "li")
+        precondition(trig(.centerThird, ijkl) == "ki")
         precondition(Command.parse("d j", ijkl) == .ctrlKey(123) && Command.parse("d h", ijkl) == nil)
         precondition(Command.parse("ij", ijkl) == Command.parse("hk", d))
         precondition(Command.spell("<left> <right>", ijkl) == "j l")
@@ -1771,7 +1772,7 @@ enum Main {
         precondition(h.argPlaceholder == "app")
         h.text = "d"
         precondition(h.argPlaceholder == nil)
-        h.text = "t  "
+        h.text = "mt  "
         precondition(h.argPlaceholder == "nothing  new window\nh l k j f c  placed there") // one option per line, keys spelled
         h.text = "d 2"
         precondition(h.argPlaceholder == nil)
@@ -1818,7 +1819,7 @@ enum Main {
         precondition(App.resized(CGRect(x: 0, y: 500, width: 400, height: 500), .resizeEdge(CGSize(width: 0, height: -1)),
                                  bounds: unit, steps: steps) == CGRect(x: 0, y: 400, width: 400, height: 600))
         precondition(Command.parse("re x", d) == nil && Command.parse("re", d) == nil)
-        precondition(Command.parse("t +", d) == nil)
+        precondition(Command.parse("mt +", d) == nil)
         precondition(Command.parse("s j", d) == .scroll(CGSize(width: 0, height: 1)))
         precondition(Command.parse("s kk", d) == .scroll(CGSize(width: 0, height: -2)))
         precondition(Command.parse("s ↓", d) == .scroll(CGSize(width: 0, height: 1)) && Command.parse("s", d) == nil)
@@ -2020,8 +2021,8 @@ enum Main {
         precondition(pt.pointerKey("w") && pt.pointerArea == CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5))
         precondition(!pt.pointerKey("l") && pt.pointerKey("→")) // arrows always work
         precondition(pt.pointerKey("S") && moved.last == .pointerBy(CGSize(width: 0, height: 10)))
-        pt.text = "m"
-        precondition(pt.typeDirection("h") && pt.text == "m h") // other commands keep the window keys
+        pt.text = "mwd"
+        precondition(pt.typeDirection("h") && pt.text == "mwd h") // other commands keep the window keys
         pt.pointerKeys = { "" }
         // Resizes preview where the window will go.
         let rp = Palette()
@@ -2042,7 +2043,7 @@ enum Main {
         var left: CGFloat = -263, frames = 0
         while App.scrollPart(left) != 0 { left -= CGFloat(App.scrollPart(left)); frames += 1 }
         precondition(abs(left) < 1 && frames < 40)
-        // "b " lists every window under its desktop, filtered by app name or title; direction keys
+        // "t " lists every window under its desktop, filtered by app name or title; direction keys
         // move around the grid and Enter switches to the highlighted window.
         let ap = Palette()
         ap.defs = { d }
@@ -2054,30 +2055,30 @@ enum Main {
         var picked: String?, pickedWindow: CGWindowID?
         ap.submit = { picked = $0 }
         ap.pickWindow = { pickedWindow = $0.id }
-        ap.text = "b "
+        ap.text = "t "
         precondition(ap.windowMatches?.count == 4 && ap.appMatches == nil)
         precondition(Palette.gridRows(ap.windowMatches!) == [[0, 1], [2], [3]])
-        precondition(ap.typeDirection("j") && ap.selected == 2 && ap.text == "b ") // down a row, not typed
+        precondition(ap.typeDirection("j") && ap.selected == 2 && ap.text == "t ") // down a row, not typed
         precondition(ap.typeDirection("k") && ap.selected == 0)
         precondition(ap.typeDirection("l") && ap.selected == 1)
         precondition(ap.typeDirection("j") && ap.selected == 2) // the row below is shorter
         precondition(ap.typeDirection("l") && ap.selected == 3 && !ap.typeDirection("x"))
-        ap.text = "b git"
+        ap.text = "t git"
         precondition(ap.windowMatches?.map(\.id) == [3]) // by title
-        ap.text = "b saf"
+        ap.text = "t saf"
         precondition(ap.windowMatches?.map(\.id) == [2, 3])
         ap.move(1)
-        ap.text = "b saf" // same text written back on a redraw keeps the highlight
+        ap.text = "t saf" // same text written back on a redraw keeps the highlight
         ap.enter()
         precondition(pickedWindow == 3)
         ap.previousWindow = 3
-        ap.text = "b "
+        ap.text = "t "
         precondition(ap.selected == 2) // starts on the previous window, like Cmd+Tab
-        ap.text = "b s"
+        ap.text = "t s"
         precondition(ap.selected == 0) // a name typed: the best match
         ap.previousWindow = nil
-        ap.text = "b"
-        precondition(ap.typeDirection("l") && ap.text == "b l" && ap.windowMatches == nil) // still the nearest window
+        ap.text = "t"
+        precondition(ap.typeDirection("l") && ap.text == "t l" && ap.windowMatches == nil) // still the nearest window
         ap.text = "o saf"
         ap.installed = [AppItem(name: "Safari", path: "/Applications/Safari.app"), AppItem(name: "Slack", path: "/Applications/Slack.app")]
         precondition(ap.appMatches?.map(\.name) == ["Safari"]) // o lists installed apps
@@ -2107,7 +2108,7 @@ enum Main {
         precondition(ap.appMatches == nil) // the list waits for a name
         var asked: [String?] = []
         ap.volumeInfo = { asked.append($0); return nil }
-        for t in ["vol", "vol ", "vol se", "vol saf", "vol google chrome j", "vol out a", "b saf"] { ap.text = t; _ = ap.volumeShown }
+        for t in ["vol", "vol ", "vol se", "vol saf", "vol google chrome j", "vol out a", "t saf"] { ap.text = t; _ = ap.volumeShown }
         precondition(asked == [nil, nil, nil, "saf", "google chrome"]) // not after "vol out" (levels are in the list) or b
         ap.text = "d 2"
         precondition(ap.appMatches == nil) // only after b, o and vol out

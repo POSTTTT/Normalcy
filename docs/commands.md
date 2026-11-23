@@ -19,15 +19,15 @@ then `h` gives `d h`.
 | Trigger | Command | Input | What it does |
 | --- | --- | --- | --- |
 | `o` | Open App | an app name | Opens the app. The list shows installed apps as you type: `o saf` |
-| `b` | Switch to App | an app name or window title, or a direction | Shows every window on every desktop as a picture, under its desktop. Type to narrow it by app name or window title: `b saf`, `b github`. Arrows, or `h` `j` `k` `l` before you type a name, move the highlight; Return goes to that window, switching desktops if needed. `b` then a direction key (no space typed) still switches to the nearest window that way: `b l` |
+| `t` | Switch to App | an app name or window title, or a direction | Shows every window on every desktop as a picture, under its desktop. Type to narrow it by app name or window title: `t saf`, `t github`. Arrows, or `h` `j` `k` `l` before you type a name, move the highlight; Return goes to that window, switching desktops if needed. `t` then a direction key (no space typed) still switches to the nearest window that way: `t l` |
 
 ## Desktops and tabs
 
 | Trigger | Command | Input | What it does |
 | --- | --- | --- | --- |
 | `d` | Go to Desktop | `1`–`9`, or `h` `l` as you press them | Goes to that desktop: `d 2`. Then `l` / → goes one desktop right and `h` / ← one left, as you press them, with the bar staying up. Return or Esc closes the bar. Set Settings › Commands › Desktops & Tabs to *Pick, then Return* and `h` `l` move the highlight in the desktop strip instead; Return goes there |
-| `m` | Move Window to Desktop | `1`–`9`, `h` or `l` | Takes the front window to that desktop: `m 3`, `m h` |
-| `t` | Move Tab to New Window | optional: a window position | Moves the current tab out into its own window. Add a position to place it: `t h` (left half), `t l3`, `t hk`, `t f` |
+| `mwd` | Move Window to Desktop | `1`–`9`, `h` or `l` | Takes the front window to that desktop: `mwd 3`, `mwd h` |
+| `mt` | Move Tab to New Window | optional: a window position | Moves the current tab out into its own window. Add a position to place it: `mt h` (left half), `mt ll`, `mt hk`, `mt f` |
 | `nt` | New Tab | none | Opens a new tab in the front app (presses Cmd+T) |
 | `ct` | Close Tab | none | Closes the current tab in the front app (presses Cmd+W) |
 | `tn` | Next Tab | none | Shows the next tab in the front app (presses Cmd+Shift+]) |
@@ -74,8 +74,8 @@ These take no input.
 | Trigger | Command | What it does |
 | --- | --- | --- |
 | `h` `l` `k` `j` | Left, Right, Top, Bottom Half | Fills that half of the screen, then, unless a window is already there, lists the other windows on this desktop: pick one to fill the other half, or **Esc** to skip |
-| `h3` `c3` `l3` | Left, Center, Right Third | Fills that third, then offers each empty third in turn, the far side first: pick a window for it, or **Esc** to stop |
-| `h23` `l23` | Left, Right Two Thirds | Fills two thirds of the screen, then offers the third left over |
+| `hh` `jk` `ll` | Left, Center, Right Third | Fills that third, then offers each empty third in turn, the far side first: pick a window for it, or **Esc** to stop |
+| `hl` `lh` | Left, Right Two Thirds | Fills two thirds of the screen, then offers the third left over |
 | `hk` `lk` `hj` `lj` | Top Left, Top Right, Bottom Left, Bottom Right Quarter | Fills that quarter, then offers each empty quarter in turn: pick a window for it, or **Esc** to stop. Either order works: `kh` = `hk` |
 | `f` | Fill Screen | Fills the screen |
 | `c` | Center | Puts the window in the middle, 70% wide and 80% tall |

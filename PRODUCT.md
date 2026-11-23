@@ -16,7 +16,7 @@ Normalcy is a keyboard command bar for macOS. Press a hotkey, type a short comma
 
 ## Positioning
 
-Vim-style short triggers (`h`, `l`, `re l`, `b saf`) typed into a native macOS bar, with every trigger and the direction keys remappable.
+Vim-style short triggers (`h`, `l`, `re l`, `t saf`) typed into a native macOS bar, with every trigger and the direction keys remappable.
 
 ## Capabilities and Constraints
 

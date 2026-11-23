@@ -31,7 +31,7 @@ final class Palette: ObservableObject {
     // The highlight goes back to the top only when the text really changes: the text field
     // also writes back the same value when the view redraws (e.g. a preview arriving).
     // Any change also gives mo the whole screen again: keys inside mo never change the text.
-    @Published var text = "" { didSet { if text != oldValue { selected = initialSelection; desktopPick = nil; pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1); updateHints() } } }
+    @Published var text = "" { didSet { if text != oldValue { selected = initialSelection; desktopPick = nil; pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1); updateHints(); if fill != nil, windowMatches == nil { fill = nil } } } }
     var live: (Command) -> Void = { _ in }
     @Published var apps: [AppItem] = [] // running apps, by name; refreshed when the bar opens
     var installed: [AppItem] = [] // apps in the Applications folders, by name
@@ -42,6 +42,7 @@ final class Palette: ObservableObject {
     @Published var windowShots: [CGWindowID: NSImage] = [:] // window -> its picture, taken when the grid shows
     var loadShots: ([CGWindowID]) -> Void = { _ in }
     var pickWindow: (WindowItem) -> Void = { _ in }
+    @Published var fill: CGRect? // after a half: the area left, which the window picked from "b " goes to
     var previousWindow: CGWindowID? // the one used before the front one; "b " starts on it, like Cmd+Tab
     @Published var selected = 0
     @Published var focusToken = 0 // bumped on every show to refocus the field
@@ -81,6 +82,7 @@ final class Palette: ObservableObject {
     // Desktop number the typed argument points at ("2", or "h"/"l" relative to the current one).
     // Screen area (fractions, top-left origin) the typed or highlighted window command would use.
     var layoutPreview: CGRect? {
+        if let fill, windowMatches != nil { return fill }
         if pointerMode == .pointer { return pointerPreview() && (pointerArea.width < 1 || pointerArea.height < 1) ? pointerArea : nil }
         switch Command.parse(text, defs()) {
         case .layout(let r): return r

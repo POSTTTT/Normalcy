@@ -283,6 +283,31 @@ enum Command: Equatable {
         default: nil
         }
     }
+
+    // The areas left beside a half (the other half), a third (the other two, the far edge first)
+    // or a quarter (the other three, beside it first, then below or above, then across);
+    // [] for center and full.
+    static func fillAreas(_ f: CGRect) -> [CGRect] {
+        let near = { (a: CGFloat, b: CGFloat) in abs(a - b) < 0.001 }
+        if near(f.width, 0.5), near(f.height, 0.5) {
+            let x = 0.5 - f.minX, y = 0.5 - f.minY // the other column and row
+            return [CGRect(x: x, y: f.minY, width: 0.5, height: 0.5), CGRect(x: f.minX, y: y, width: 0.5, height: 0.5),
+                    CGRect(x: x, y: y, width: 0.5, height: 0.5)]
+        }
+        if near(f.height, 1), near(f.width, 1.0 / 3) {
+            let thirds = [0.0, 1.0 / 3, 2.0 / 3].map { CGRect(x: $0, y: 0, width: 1.0 / 3, height: 1) }
+            return (near(f.minX, 2.0 / 3) ? thirds : thirds.reversed()).filter { !near($0.minX, f.minX) }
+        }
+        if near(f.height, 1), f.width < 0.99 {
+            if near(f.minX, 0) { return [CGRect(x: f.maxX, y: 0, width: 1 - f.maxX, height: 1)] }
+            if near(f.maxX, 1) { return [CGRect(x: 0, y: 0, width: f.minX, height: 1)] }
+        }
+        if near(f.width, 1), f.height < 0.99 {
+            if near(f.minY, 0) { return [CGRect(x: 0, y: f.maxY, width: 1, height: 1 - f.maxY)] }
+            if near(f.maxY, 1) { return [CGRect(x: 0, y: 0, width: 1, height: f.minY)] }
+        }
+        return []
+    }
 }
 
 final class Panel: NSPanel {
@@ -468,8 +493,21 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         palette.submit = { [weak self] text in
             guard let self else { return }
             let cmd = Command.parse(text, palette.defs())
+            let fromBar = panel.isVisible // not `--run` from a script
             hide()
-            if let cmd { run(cmd) } else { NSSound.beep() }
+            guard let cmd else { return NSSound.beep() }
+            let placed = focusedWindow().flatMap { w -> CGWindowID? in
+                var id: CGWindowID = 0
+                return _AXUIElementGetWindow(w, &id) == .success ? id : nil
+            }
+            run(cmd)
+            // A half or side third: offer this desktop's other windows for the space left over.
+            if fromBar, case .layout(let f) = cmd {
+                fillAreas = Command.fillAreas(f)
+                fillTaken = Set([placed].compactMap { $0 })
+                // shortcut: fixed wait for the window to land before the bar comes back; lengthen if it flickers.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.offerFill() }
+            }
         }
         palette.submitContinuing = { [weak self] text in
             guard let self, let cmd = Command.parse(text, palette.defs()) else { return NSSound.beep() }
@@ -533,7 +571,18 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         palette.loadShots = { [weak self] ids in
             Task { @MainActor in await Snapshot.windows(ids) { self?.palette.windowShots[$0] = $1 } }
         }
-        palette.pickWindow = { [weak self] w in self?.hide(); self?.focus(w) }
+        palette.pickWindow = { [weak self] w in
+            guard let self else { return }
+            let fill = palette.fill
+            hide()
+            if let fill, let ax = axWindow(w.pid, id: w.id) { place(fill, window: ax) }
+            focus(w)
+            // Quarters: on to the next empty one.
+            if fill != nil {
+                fillTaken.insert(w.id)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.offerFill() }
+            }
+        }
         panel.contentView = NSHostingView(rootView: PaletteView(model: palette))
         preview.contentView = NSHostingView(rootView: LayoutPreview(model: palette))
         preview.isOpaque = false
@@ -620,6 +669,37 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.palette.focusToken += 1
             withAnimation(.uiEaseOut(0.15)) { self.palette.visible = true }
         }
+    }
+
+    var fillAreas: [CGRect] = [] // after a half, third or quarter: the areas a picked window can go to
+    var fillTaken = Set<CGWindowID>() // windows already placed in this round, left out of the list
+
+    // The bar again, as "b " listing only the other windows on this desktop, for the first area
+    // left with no window in it; picking one puts it there. Nothing to pick, every area already
+    // has a window, or the switch command off: stays closed.
+    func offerFill() {
+        guard let b = palette.defs().first(where: { $0.enabled && $0.id == Action.focus.rawValue })?.trigger,
+              let s = Self.screenBounds() else { return }
+        let current = Desktops.read().currentID
+        let here = windowItems().filter { $0.space == current && !fillTaken.contains($0.id) }
+        let shown = Self.visibleWindows()
+        let rest = fillAreas.first { r in
+            let area = CGRect(x: s.minX + s.width * r.minX, y: s.minY + s.height * r.minY,
+                              width: s.width * r.width, height: s.height * r.height)
+            return !shown.contains { Self.fills($0.frame, area) }
+        }
+        guard let rest, !here.isEmpty else { return }
+        show()
+        palette.windows = here
+        palette.previousWindow = here.first?.id
+        palette.text = b + " "
+        palette.fill = rest // after the text, whose change would clear it
+    }
+
+    // A window sits in that area: it covers most of it and little else, so a big window behind doesn't count.
+    static func fills(_ w: CGRect, _ area: CGRect) -> Bool {
+        let i = w.intersection(area), size = { (r: CGRect) in r.isNull ? 0 : r.width * r.height }
+        return size(i) >= 0.8 * size(area) && size(i) >= 0.8 * size(w)
     }
 
     // Closing stays instant: a fading bar would get caught in a desktop switch.
@@ -1483,6 +1563,18 @@ enum Main {
         let leftHalf = CGRect(x: 0, y: 0, width: 500, height: 800), rightHalf = CGRect(x: 510, y: 0, width: 490, height: 800)
         precondition(App.neighborsResized(old: leftHalf, new: CGRect(x: 0, y: 0, width: 600, height: 800), others: [rightHalf, tiles[0]])
                      == [0: CGRect(x: 610, y: 0, width: 390, height: 800)])
+        precondition(Command.fillAreas(Command.layoutRect(.left)!) == [Command.layoutRect(.right)!])
+        precondition(Command.fillAreas(Command.layoutRect(.bottom)!) == [Command.layoutRect(.top)!])
+        precondition(Command.fillAreas(Command.layoutRect(.rightThird)!) == [.leftThird, .centerThird].map { Command.layoutRect($0)! })
+        precondition(Command.fillAreas(Command.layoutRect(.leftThird)!) == [.rightThird, .centerThird].map { Command.layoutRect($0)! })
+        precondition(Command.fillAreas(Command.layoutRect(.centerThird)!).count == 2)
+        precondition(Command.fillAreas(Command.layoutRect(.topLeft)!) == [.topRight, .bottomLeft, .bottomRight].map { Command.layoutRect($0)! })
+        precondition(Command.fillAreas(Command.layoutRect(.bottomRight)!) == [.bottomLeft, .topRight, .topLeft].map { Command.layoutRect($0)! })
+        precondition([.full, .center].allSatisfy { Command.fillAreas(Command.layoutRect($0)!).isEmpty })
+        let rightArea = CGRect(x: 500, y: 0, width: 500, height: 800)
+        precondition(App.fills(CGRect(x: 505, y: 0, width: 495, height: 800), rightArea))
+        precondition(!App.fills(CGRect(x: 0, y: 0, width: 1000, height: 800), rightArea)) // full-screen window behind
+        precondition(!App.fills(CGRect(x: 0, y: 0, width: 500, height: 800), rightArea)) // the placed half
         precondition(Command.parse("d 2", d) == .ctrlKey(19))
         precondition(Command.parse("d l", d) == .ctrlKey(124))
         precondition(Command.parse("d 0", d) == nil)

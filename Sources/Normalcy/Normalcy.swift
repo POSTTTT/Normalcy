@@ -732,11 +732,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    // A window sits in that area: mostly inside it, so a big window behind doesn't count, and
-    // taking at least a quarter of it, so one shrunk with "re" still does.
+    // A window fills that area: it covers most of it and little else, so a big window behind
+    // doesn't count, and one taking only part of it (a third in a half) leaves it to offer.
     static func fills(_ w: CGRect, _ area: CGRect) -> Bool {
         let i = w.intersection(area), size = { (r: CGRect) in r.isNull ? 0 : r.width * r.height }
-        return size(i) >= 0.25 * size(area) && size(i) >= 0.8 * size(w)
+        return size(i) >= 0.8 * size(area) && size(i) >= 0.8 * size(w)
     }
 
     // Closing stays instant: a fading bar would get caught in a desktop switch.
@@ -1635,7 +1635,7 @@ enum Main {
         precondition(App.fills(CGRect(x: 505, y: 0, width: 495, height: 800), rightArea))
         precondition(!App.fills(CGRect(x: 0, y: 0, width: 1000, height: 800), rightArea)) // full-screen window behind
         precondition(!App.fills(CGRect(x: 0, y: 0, width: 500, height: 800), rightArea)) // the placed half
-        precondition(App.fills(CGRect(x: 500, y: 0, width: 300, height: 800), rightArea)) // shrunk with re
+        precondition(!App.fills(CGRect(x: 667, y: 0, width: 333, height: 800), rightArea)) // a third in the half
         precondition(App.frame(Command.layoutRect(.right)!, in: CGRect(x: 0, y: 25, width: 1000, height: 800))
                      == CGRect(x: 500, y: 25, width: 500, height: 800))
         precondition(App.near(CGRect(x: 508, y: 33, width: 484, height: 784), CGRect(x: 500, y: 25, width: 500, height: 800)))

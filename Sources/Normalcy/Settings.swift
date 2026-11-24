@@ -76,7 +76,7 @@ enum Action: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .open: "Open App"
+        case .open: "Open App, File or Folder"
         case .focus: "Switch to App"
         case .desktop: "Go to Desktop"
         case .move: "Move Window to Desktop"
@@ -218,7 +218,7 @@ enum Action: String, CaseIterable {
     // nil when the command takes no argument.
     var argHint: String? {
         switch self {
-        case .open: "app"
+        case .open: "app, a / fi / fo name"
         case .focus: "app <left> <down> <up> <right>"
         case .desktop, .move: "1-9 <left> <right>"
         case .tab: "<left> <right> <up> <down> f c"
@@ -241,7 +241,7 @@ enum Action: String, CaseIterable {
     // one option per line, stacked or run together on one line as set in Settings.
     var argName: String? {
         switch self {
-        case .open: "app"
+        case .open: "app  that app\nfi name  a file\nfo name  a folder"
         case .focus: "app or window title, then <left> <down> <up> <right> to pick\n<left> <down> <up> <right>  nearest window"
         case .desktop: "1-9  that desktop\n<left> <right>  next one"
         case .move: "1-9  to that desktop\n<left> <right>  to the next one"

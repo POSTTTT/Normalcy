@@ -14,6 +14,8 @@ struct AppItem: Equatable {
     var current = false // "vol out": the device sound plays on now
     var symbol: String? // "vol out": the device's kind, as an SF Symbol; set only for devices
     var level: Float? // "vol out": the device's volume, 0-1; nil when it has none
+    var detail: String? // "o fi" / "o fo": the folder it's in
+    var key: String { path ?? name } // files can share a name; their paths can't
 }
 
 // A window in the "b " grid.
@@ -31,10 +33,12 @@ final class Palette: ObservableObject {
     // The highlight goes back to the top only when the text really changes: the text field
     // also writes back the same value when the view redraws (e.g. a preview arriving).
     // Any change also gives mo the whole screen again: keys inside mo never change the text.
-    @Published var text = "" { didSet { if text != oldValue { selected = initialSelection; desktopPick = nil; pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1); updateHints(); if fill != nil, windowMatches == nil { fill = nil } } } }
+    @Published var text = "" { didSet { if text != oldValue { selected = initialSelection; desktopPick = nil; pointerArea = CGRect(x: 0, y: 0, width: 1, height: 1); updateHints(); updateFiles(); if fill != nil, windowMatches == nil { fill = nil } } } }
     var live: (Command) -> Void = { _ in }
     @Published var apps: [AppItem] = [] // running apps, by name; refreshed when the bar opens
     var installed: [AppItem] = [] // apps in the Applications folders, by name
+    @Published var files: [AppItem] = [] // "o fi" / "o fo": what Spotlight found for the name typed
+    var searchFiles: (String, Bool, @escaping ([AppItem]) -> Void) -> Void = App.searchFiles // name, folders?, done
     var outputs: [AppItem] = [] // sound output devices, for "vol out"; refreshed when the bar opens
     var volumeInfo: (String?) -> VolumeInfo? = App.volumeInfo
     var currentOutput: (String?) -> String? = App.currentOutput // the Mac's, or that app's
@@ -428,7 +432,14 @@ final class Palette: ObservableObject {
         let pool: [AppItem]
         let id = Command.lookup(String(s[..<sp]), in: defs())?.id
         switch id {
-        case Action.open.rawValue: pool = installed
+        case Action.open.rawValue:
+            if let o = openFiles { return o.query.isEmpty ? nil : files }
+            pool = installed
+            let rest = s[s.index(after: sp)...].trimmingCharacters(in: .whitespaces)
+            if rest.hasPrefix("a ") { // "o a saf": the same as "o saf"
+                let q = rest.dropFirst(2).trimmingCharacters(in: .whitespaces).lowercased()
+                return pool.filter { q.isEmpty || $0.name.lowercased().hasPrefix(q) }
+            }
         case Action.volume.rawValue:
             let rest = s[s.index(after: sp)...].trimmingCharacters(in: .whitespaces)
             // "vol saf": running apps whose name starts with it, without the window preview.
@@ -445,6 +456,27 @@ final class Palette: ObservableObject {
         }
         let q = s[s.index(after: sp)...].trimmingCharacters(in: .whitespaces).lowercased()
         return pool.filter { q.isEmpty || $0.name.lowercased().hasPrefix(q) }
+    }
+
+    // "o fi report" / "o fo down": the word picking files or folders, and the name typed after it.
+    var openFiles: (word: String, query: String)? {
+        let s = text.drop { $0 == " " }
+        guard let sp = s.firstIndex(of: " "), Command.lookup(String(s[..<sp]), in: defs())?.id == Action.open.rawValue else { return nil }
+        let rest = s[s.index(after: sp)...].drop { $0 == " " }
+        for word in ["fi", "fo"] where rest.hasPrefix(word + " ") {
+            return (word, rest.dropFirst(3).trimmingCharacters(in: .whitespaces))
+        }
+        return nil
+    }
+
+    // Asks Spotlight again each time the name changes; an answer for an older name is dropped.
+    func updateFiles() {
+        guard let o = openFiles, !o.query.isEmpty else { if !files.isEmpty { files = [] }; return }
+        let asked = text
+        searchFiles(o.query, o.word == "fo") { [weak self] found in
+            guard let self, self.text == asked else { return }
+            self.files = found
+        }
     }
 
     // After the switch command and a space ("b ", "b saf"): every window on every desktop whose
@@ -524,6 +556,7 @@ final class Palette: ObservableObject {
                let out = text.range(of: " out", options: .backwards) {
                 return run(text[..<out.upperBound] + " " + list[selected].name)
             }
+            if let o = openFiles, let path = list[selected].path { return run(head + " " + o.word + " " + path) }
             return run(head + " " + list[selected].name)
         }
         // Shift+Enter with nothing it can run finishes it: the bar stays up, empty, for the next
@@ -659,20 +692,21 @@ struct PaletteView: View {
                 ScrollViewReader { scroll in
                     ScrollView {
                         LazyVStack(spacing: 2) {
-                            ForEach(Array(apps.enumerated()), id: \.element.name) { i, app in
+                            ForEach(Array(apps.enumerated()), id: \.element.key) { i, app in
+                                // Keyed by name, not row: by row, the lazy stack kept drawing the old rows after filtering.
                                 appRow(app, selected: i == model.selected)
-                                    .id(i)
+                                    .id(app.key)
                                     .onTapGesture { model.selected = i; model.enter() }
                             }
                         }
                     }
                     .scrollIndicators(.never)
                     .frame(height: CGFloat(min(apps.count, 8)) * 42 - 2)
-                    .onChange(of: model.selected) { scroll.scrollTo(model.selected) }
+                    .onChange(of: model.selected) { if apps.indices.contains(model.selected) { scroll.scrollTo(apps[model.selected].key) } }
                 }
                 .padding(8)
                 .glass(RoundedRectangle(cornerRadius: 26, style: .continuous))
-                .animation(motion(0.18) ?? .linear(duration: 0.1), value: apps.map(\.name))
+                .animation(motion(0.18) ?? .linear(duration: 0.1), value: apps.map(\.key))
                 .animation(motion(0.15), value: model.selected)
             }
         } else if store.showList, !rows.isEmpty {
@@ -1048,6 +1082,9 @@ struct PaletteView: View {
                 Image(nsImage: icon).resizable().frame(width: 26, height: 26)
             }
             Text(app.name).font(.system(size: 15)).lineLimit(1)
+            if let detail = app.detail {
+                Text(detail).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
+            }
             Spacer()
             if app.symbol != nil {
                 Image(systemName: "speaker.wave.2.fill").font(.system(size: 12)).foregroundStyle(.secondary)

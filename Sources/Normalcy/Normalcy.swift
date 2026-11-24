@@ -73,6 +73,7 @@ enum Command: Equatable {
     }
 
     case open(String)
+    case openPath(String) // a file or folder, from "o fi" / "o fo"
     case focus(String)
     case focusWindow(Action) // the nearest window on this desktop to the left / right / top / bottom
     case ctrlKey(CGKeyCode)
@@ -155,7 +156,14 @@ enum Command: Equatable {
         if let k = def.shortcut { return arg.isEmpty ? .keys(k) : nil }
         guard let action = Action(rawValue: def.id) else { return nil }
         switch action {
-        case .open: return arg.isEmpty ? nil : .open(arg)
+        case .open:
+            // "o a saf" = "o saf"; "o fi" / "o fo" take the path picked from the list.
+            if arg.hasPrefix("a ") { return .open(String(arg.dropFirst(2)).trimmingCharacters(in: .whitespaces)) }
+            if arg.hasPrefix("fi ") || arg.hasPrefix("fo ") {
+                let path = arg.dropFirst(3).trimmingCharacters(in: .whitespaces)
+                return path.hasPrefix("/") || path.hasPrefix("~") ? .openPath(path) : nil
+            }
+            return arg.isEmpty ? nil : .open(arg)
         case .focus:
             if let d = direction(arg, in: defs) { return .focusWindow(d) }
             return arg.isEmpty ? nil : .focus(arg)
@@ -778,6 +786,34 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    // Spotlight: files (or folders) whose name has the text, last used first, up to 30.
+    static var fileQuery: NSMetadataQuery?
+    static func searchFiles(_ name: String, folders: Bool, done: @escaping ([AppItem]) -> Void) {
+        fileQuery?.stop()
+        let q = NSMetadataQuery()
+        fileQuery = q
+        let kind = folders ? "kMDItemContentType == 'public.folder'" : "kMDItemContentType != 'public.folder'"
+        q.predicate = NSPredicate(format: "kMDItemFSName LIKE[cd] %@ AND " + kind, "*\(name)*")
+        q.searchScopes = [NSMetadataQueryLocalComputerScope]
+        q.sortDescriptors = [NSSortDescriptor(key: "kMDItemLastUsedDate", ascending: false)]
+        var token: NSObjectProtocol?
+        token = NotificationCenter.default.addObserver(forName: .NSMetadataQueryDidFinishGathering, object: q, queue: .main) { _ in
+            q.stop()
+            NotificationCenter.default.removeObserver(token!)
+            let home = NSHomeDirectory()
+            // Inside hidden folders and node_modules: thousands of files nobody opens by name.
+            let paths = (0..<q.resultCount).lazy
+                .compactMap { (q.result(at: $0) as? NSMetadataItem)?.value(forAttribute: NSMetadataItemPathKey) as? String }
+                .filter { !$0.contains("/.") && !$0.contains("/node_modules/") }
+            done(paths.prefix(30).map { path in
+                let dir = (path as NSString).deletingLastPathComponent
+                return AppItem(name: (path as NSString).lastPathComponent, path: path,
+                               detail: dir.hasPrefix(home) ? "~" + dir.dropFirst(home.count) : dir)
+            })
+        }
+        q.start()
+    }
+
     // The apps Cmd+Tab shows: ones with a window showing on this desktop, plus Finder, most
     // recently used first, then the rest by name.
     func runningApps() -> [AppItem] {
@@ -899,6 +935,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         switch cmd {
         case .open(let name):
             _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/open"), arguments: ["-a", name])
+        case .openPath(let path):
+            NSWorkspace.shared.open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
         case .focus(let q):
             Self.runningApp(q)?.activate()
         case .focusWindow(let dir):
@@ -1818,7 +1856,7 @@ enum Main {
         let h = Palette()
         h.defs = { d }
         h.text = "o "
-        precondition(h.argPlaceholder == "app")
+        precondition(h.argPlaceholder == "app  that app\nfi name  a file\nfo name  a folder")
         h.text = "d"
         precondition(h.argPlaceholder == nil)
         h.text = "mt  "
@@ -2131,6 +2169,18 @@ enum Main {
         ap.text = "o saf"
         ap.installed = [AppItem(name: "Safari", path: "/Applications/Safari.app"), AppItem(name: "Slack", path: "/Applications/Slack.app")]
         precondition(ap.appMatches?.map(\.name) == ["Safari"]) // o lists installed apps
+        ap.text = "o a sl"
+        precondition(ap.appMatches?.map(\.name) == ["Slack"]) // "o a" = "o"
+        var searched: [String] = []
+        ap.searchFiles = { name, folders, done in searched.append(name + (folders ? "/" : "")); done([AppItem(name: "r.pdf", path: "/tmp/r.pdf")]) }
+        ap.text = "o fi "
+        precondition(ap.appMatches == nil && searched.isEmpty) // waits for a name
+        ap.text = "o fi r"
+        ap.text = "o fo do"
+        precondition(searched == ["r", "do/"] && ap.appMatches?.map(\.name) == ["r.pdf"])
+        precondition(Command.parse("o fi /tmp/r.pdf", d) == .openPath("/tmp/r.pdf") && Command.parse("o fi r", d) == nil)
+        precondition(Command.parse("o a Safari", d) == .open("Safari") && Command.parse("o fig", d) == .open("fig"))
+        ap.text = "o saf"
         ap.enter()
         precondition(picked == "o Safari")
         ap.outputs = ["AirPods", "MacBook Pro Speakers"].map { AppItem(name: $0) }

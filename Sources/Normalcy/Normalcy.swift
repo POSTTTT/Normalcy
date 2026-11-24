@@ -518,18 +518,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             hide()
             guard let cmd else { return NSSound.beep() }
             let placedAX = focusedWindow()
-            let placed = placedAX.flatMap { w -> CGWindowID? in
-                var id: CGWindowID = 0
-                return _AXUIElementGetWindow(w, &id) == .success ? id : nil
-            }
-            run(cmd)
+            let round = fillRound
+            // "mt h": the new window lands later, once the tab has moved out; then the same offer.
+            run(cmd) { placed in if fromBar, case .tabToWindow(let f?) = cmd { self.fillAfter(f, placed: placed, round: round) } }
             // A half or side third: offer this desktop's other windows for the space left over.
-            if fromBar, case .layout(let f) = cmd {
-                fillAreas = Command.fillAreas(f)
-                fillTaken = Set([placed].compactMap { $0 })
-                let round = fillRound
-                whenSettled(placedAX) { self.offerFill(round) }
-            }
+            if fromBar, case .layout(let f) = cmd { fillAfter(f, placed: placedAX, round: round) }
         }
         palette.submitContinuing = { [weak self] text in
             guard let self, let cmd = Command.parse(text, palette.defs()) else { return NSSound.beep() }
@@ -540,7 +533,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // ignores losing focus until it takes it back once the command has landed.
             continuing = true
             palette.text = again
-            run(cmd)
+            fillRound += 1 // a fill still waiting from the last Shift+Enter is dropped
+            let round = fillRound
+            run(cmd) { placed in if case .tabToWindow(let f?) = cmd { self.fillAfter(f, placed: placed, round: round, keepBar: true) } }
+            if case .layout(let f) = cmd { fillAfter(f, placed: focusedWindow(), round: round, keepBar: true) }
             // shortcut: fixed delays, not completion callbacks; lengthen if focus comes back too early.
             // Desktop switches come back once the switch lands (see the space-change observer);
             // their delay is only the fallback for when no switch happens, like "d l" on the last desktop.
@@ -709,24 +705,38 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var fillRound = 0 // bumped each time the bar opens
     var fillAreas: [CGRect] = [] // after a half, third or quarter: the areas a picked window can go to
     var fillTaken = Set<CGWindowID>() // windows already placed in this round, left out of the list
+    var fillKeepsBar = false // started by Shift+Enter: once nothing is left to fill, the empty bar comes back
+
+    func fillAfter(_ f: CGRect, placed: AXUIElement?, round: Int, keepBar: Bool = false) {
+        fillKeepsBar = keepBar
+        fillAreas = Command.fillAreas(f)
+        fillTaken = Set([placed.flatMap { w -> CGWindowID? in
+            var id: CGWindowID = 0
+            return _AXUIElementGetWindow(w, &id) == .success ? id : nil
+        }].compactMap { $0 })
+        whenSettled(placed) { self.offerFill(round) }
+    }
 
     // The bar again, as "b " listing only the other windows on this desktop, for the first area
     // left with no window in it; picking one puts it there. Nothing to pick, every area already
     // has a window, or the switch command off: stays closed.
     func offerFill(_ round: Int) {
-        // The bar was opened since (another command, typed meanwhile), or is up: too late to offer.
-        guard round == fillRound, !panel.isVisible else { return }
-        guard let b = palette.defs().first(where: { $0.enabled && $0.id == Action.focus.rawValue })?.trigger,
-              let s = Self.screenBounds() else { return }
+        // The bar was opened since, or something was typed in it after Shift+Enter: too late to offer.
+        guard round == fillRound, !panel.isVisible || palette.text.isEmpty else { return }
         let current = Desktops.read().currentID
         let here = windowItems().filter { $0.space == current && !fillTaken.contains($0.id) }
         let shown = Self.visibleWindows()
-        let rest = fillAreas.first { r in
+        let s = Self.screenBounds()
+        let rest = s.flatMap { s in fillAreas.first { r in
             let area = CGRect(x: s.minX + s.width * r.minX, y: s.minY + s.height * r.minY,
                               width: s.width * r.width, height: s.height * r.height)
             return !shown.contains { Self.fills($0.frame, area) }
+        } }
+        guard let b = palette.defs().first(where: { $0.enabled && $0.id == Action.focus.rawValue })?.trigger,
+              let rest, !here.isEmpty else {
+            if fillKeepsBar, !panel.isVisible { show() } // after the last pick: on to the next command
+            return
         }
-        guard let rest, !here.isEmpty else { return }
         show()
         palette.windows = here
         palette.previousWindow = here.first?.id
@@ -931,7 +941,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         palette.focusToken += 1
     }
 
-    func run(_ cmd: Command) {
+    // placed: after "mt" with a layout, the window that went there.
+    func run(_ cmd: Command, placed: @escaping (AXUIElement) -> Void = { _ in }) {
         switch cmd {
         case .open(let name):
             _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/open"), arguments: ["-a", name])
@@ -987,7 +998,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     // Safari opens the moved tab as the new window. Apps using standard macOS tabs
                     // keep the moved tab's own window, and the tabs left behind become the new one.
                     let movedIsNew = self.focusedWindow().map { CFEqual($0, new) } ?? false
-                    if let layout { self.place(layout, window: movedIsNew ? new : origin) }
+                    if let layout {
+                        let w = movedIsNew ? new : origin
+                        self.place(layout, window: w)
+                        placed(w)
+                    }
                 }
             }
         case .switchTab(let next):

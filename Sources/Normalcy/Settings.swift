@@ -4,7 +4,7 @@ import SwiftUI
 enum Action: String, CaseIterable {
     case open, focus, desktop, move, tab, newTab, closeTab, nextTab, prevTab, tabs, back, forward, left, right, top, bottom, full, center
     case leftThird, centerThird, rightThird, leftTwoThirds, rightTwoThirds, topLeft, topRight, bottomLeft, bottomRight
-    case grow, shrink, resize
+    case grow, shrink, resize, minimize
     case scroll, arrows
     case copy, cut, copyWord, cutWord, paste, undo, redo, selectAll, select, deselect, lineStart, lineEnd
     case pointer, pointerStep, hints
@@ -46,6 +46,7 @@ enum Action: String, CaseIterable {
         case .grow: "+"
         case .shrink: "-"
         case .resize: "re"
+        case .minimize: "m"
         case .scroll: "s"
         case .arrows: "ar"
         case .copy: "cp"
@@ -105,6 +106,7 @@ enum Action: String, CaseIterable {
         case .grow: "Make Bigger"
         case .shrink: "Make Smaller"
         case .resize: "Resize by Direction"
+        case .minimize: "Minimize"
         case .scroll: "Scroll"
         case .arrows: "Arrow Keys"
         case .copy: "Copy"
@@ -164,6 +166,7 @@ enum Action: String, CaseIterable {
         case .grow: "arrow.up.left.and.arrow.down.right"
         case .shrink: "arrow.down.right.and.arrow.up.left"
         case .resize: "arrow.up.and.down.and.arrow.left.and.right"
+        case .minimize: "minus.square"
         case .scroll: "scroll"
         case .arrows: "arrowkeys"
         case .copy: "doc.on.doc"
@@ -203,7 +206,7 @@ enum Action: String, CaseIterable {
         case .leftThird, .centerThird, .rightThird, .leftTwoThirds, .rightTwoThirds: "Thirds"
         case .topLeft, .topRight, .bottomLeft, .bottomRight: "Quarters"
         case .full, .center: "Fill & Center"
-        case .grow, .shrink, .resize: "Resize"
+        case .grow, .shrink, .resize, .minimize: "Resize"
         case .scroll, .arrows: "Scroll"
         case .copy, .cut, .copyWord, .cutWord, .paste, .undo, .redo, .selectAll, .select, .deselect, .lineStart, .lineEnd: "Edit"
         case .pointer, .pointerStep, .hints: "Pointer"

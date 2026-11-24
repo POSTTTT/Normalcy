@@ -173,6 +173,7 @@ enum Command: Equatable {
         // Cmd+T / Cmd+W in the app in front, the same path as an app shortcut.
         case .newTab: return .keys(HotKey(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(cmdKey), label: "⌘T"))
         case .closeTab: return .keys(HotKey(keyCode: UInt32(kVK_ANSI_W), modifiers: UInt32(cmdKey), label: "⌘W"))
+        case .minimize: return arg.isEmpty ? .keys(HotKey(keyCode: UInt32(kVK_ANSI_M), modifiers: UInt32(cmdKey), label: "⌘M")) : nil
         case .nextTab: return .switchTab(next: true)
         case .prevTab: return .switchTab(next: false)
         case .forward: return .history(forward: true)
